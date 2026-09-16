@@ -1,0 +1,8 @@
+dist/
+.DS_Store
+.module-cache/
+*.log
+*.env
+.env.*
+configs.json
+portkeeper.json
