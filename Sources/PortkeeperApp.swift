@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if !PORTKEEPER_TEST
 @main struct PortkeeperApp: App {
     @NSApplicationDelegateAdaptor(PortkeeperDelegate.self) private var delegate
 
@@ -12,11 +13,15 @@ import UniformTypeIdentifiers
     }
 }
 
+#endif
+
 enum PanelTab: String, CaseIterable { case services = "Services", ports = "Ports" }
 
 struct PortkeeperPanel: View {
     @ObservedObject var model: PortkeeperModel
     @ObservedObject var route: PortkeeperPanelRoute
+    var embedded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: PanelTab = .services
     @State private var handoffNotice: String?
     @State private var panelError: String?
@@ -26,13 +31,14 @@ struct PortkeeperPanel: View {
         ZStack {
             PortkeeperBackdrop()
             pageContent
-                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .id(route.page)
+                .transition(.opacity)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: route.page)
         }
-        .frame(width: route.page.size.width, height: route.page.size.height)
+        .frame(width: route.page.size.width, height: embedded ? nil : route.page.size.height)
         .foregroundStyle(PortkeeperStyle.ivory)
         .tint(PortkeeperStyle.coral)
         .preferredColorScheme(.dark)
-        .animation(.easeInOut(duration: 0.18), value: route.page)
         .onChange(of: route.revision) { _, _ in tab = route.selectedTab }
     }
 
@@ -51,6 +57,8 @@ struct PortkeeperPanel: View {
             ServiceActionsPage(config: config, onBack: { route.back() },
                                onEdit: { editService(config) },
                                onOutput: { openOutput(config) },
+                               onRestart: { model.restart(config); route.back() },
+                               onActivate: { route.activateTerminal?(config.id); route.back() },
                                onRemove: { route.confirmServiceDelete(config) })
         case .serviceDelete(let config):
             DeleteServicePage(config: config, onCancel: { route.back() }, onDelete: {
@@ -71,6 +79,7 @@ struct PortkeeperPanel: View {
                                serviceCount: model.configs.filter { $0.group == group }.count,
                                onBack: { route.back() },
                                onAdd: { addService(to: group) },
+                               onRestart: { model.restartGroup(group); route.back() },
                                onRename: { route.editProject(group) },
                                onDelete: { route.confirmProjectDelete(group) })
         case .projectDelete(let group):
@@ -83,7 +92,7 @@ struct PortkeeperPanel: View {
                               })
         case .output(let id):
             if let config = model.configs.first(where: { $0.id == id }) {
-                ServiceOutputPage(config: config, model: model, onBack: { route.back() })
+                ServiceOutputPage(config: config, model: model, onBack: { route.back() }, onPin: { route.openTerminals?(config.id) })
             } else {
                 PortkeeperGlassButton(action: { route.back() }) { Text("Back to services") }
             }
@@ -110,11 +119,13 @@ struct PortkeeperPanel: View {
                                          route.back()
                                      })
             }
+        case .pasteJSON:
+            PasteProjectPage(onBack: { route.page = .handoff }, onReview: route.reviewImport)
         case .handoff:
             HandoffActionsPage(onBack: { route.back() }, onCopy: { copyBrief(); route.back() },
-                               onSave: saveBrief, onImport: chooseManifest)
+                               onSave: saveBrief, onPaste: { route.page = .pasteJSON }, onImport: chooseManifest)
         case .settings:
-            SettingsActionsPage(onBack: { route.back() },
+            SettingsActionsPage(model: model, onBack: { route.back() },
                                 onQuit: { NSApplication.shared.terminate(nil) })
         }
     }
@@ -122,6 +133,18 @@ struct PortkeeperPanel: View {
     private var dashboard: some View {
         VStack(spacing: 0) {
             header
+            if !embedded {
+                Button { route.openTerminals?(nil) } label: {
+                    HStack {
+                        Label("Active terminals", systemImage: "sidebar.right")
+                        Spacer()
+                        Text("Pin all active").foregroundStyle(PortkeeperStyle.cyan)
+                    }.font(.system(size: 11, weight: .medium, design: .monospaced)).padding(10)
+                }
+                .buttonStyle(.plain)
+                .background(PortkeeperStyle.well, in: RoundedRectangle(cornerRadius: 7))
+                .padding(.horizontal, 18).padding(.vertical, 10)
+            }
             tabBar
             .padding(.horizontal, 18)
             .padding(.bottom, 12)
@@ -130,7 +153,7 @@ struct PortkeeperPanel: View {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(PortkeeperStyle.coral)
-                    Text(panelError).font(.system(size: 10)).lineLimit(2)
+                    Text(panelError).font(.system(size: 10, design: .monospaced)).lineLimit(2)
                     Spacer()
                     Button { self.panelError = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain)
@@ -151,7 +174,7 @@ struct PortkeeperPanel: View {
 
             footer
         }
-        .frame(width: 400, height: 590)
+        .frame(width: 400, height: embedded ? nil : 590)
     }
 
     private func focusedIssue(_ config: ServiceConfig) -> some View {
@@ -159,7 +182,7 @@ struct PortkeeperPanel: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(PortkeeperStyle.coral)
             VStack(alignment: .leading, spacing: 3) {
-                Text(config.name).font(.system(size: 11, weight: .semibold))
+                Text(config.name).font(.system(size: 11, weight: .semibold, design: .monospaced))
                 Text(route.issueMessage ?? model.activeIssues[config.id]?.message ?? "Review this service's status and output.")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(PortkeeperStyle.muted)
@@ -182,15 +205,13 @@ struct PortkeeperPanel: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(nsImage: NSImage(contentsOf: Bundle.main.resourceURL!.appendingPathComponent("AppIcon.icns")) ?? NSImage())
-                .resizable()
-                .interpolation(.high)
+            Image(systemName: "terminal.fill")
+                .font(.system(size: 27, weight: .light, design: .monospaced))
+                .foregroundStyle(PortkeeperStyle.green)
                 .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).stroke(PortkeeperStyle.line.opacity(0.65), lineWidth: 1))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Portkeeper").font(.system(size: 18, weight: .semibold))
+                Text("portkeeper_").font(.system(size: 18, weight: .semibold, design: .monospaced))
                     .foregroundStyle(PortkeeperStyle.ivory)
                 HStack(spacing: 5) {
                     Text("\(model.listeners.count) listening ports · \(runningCount) managed")
@@ -205,7 +226,7 @@ struct PortkeeperPanel: View {
             Spacer()
             PortkeeperGlassButton(action: { model.refresh() }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .frame(width: 20, height: 20)
             }
             .help("Scan ports now")
@@ -213,7 +234,7 @@ struct PortkeeperPanel: View {
         .padding(.horizontal, 18)
         .padding(.top, 17)
         .padding(.bottom, 14)
-        .background(.ultraThinMaterial)
+        .background(Color.black)
         .overlay(alignment: .bottom) { PortkeeperStyle.line.opacity(0.55).frame(height: 1) }
     }
 
@@ -223,8 +244,8 @@ struct PortkeeperPanel: View {
                 Button { tab = choice; route.selectedTab = choice } label: {
                     HStack(spacing: 7) {
                         Image(systemName: choice == .services ? "square.stack" : "network")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(choice.rawValue).font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        Text(choice.rawValue).font(.system(size: 12, weight: .medium, design: .monospaced))
                     }
                     .foregroundStyle(tab == choice ? PortkeeperStyle.ivory : PortkeeperStyle.muted)
                     .frame(maxWidth: .infinity)
@@ -256,7 +277,7 @@ struct PortkeeperPanel: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
                                     .foregroundStyle(PortkeeperStyle.coral)
                                 Text(group.uppercased())
                                     .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -265,15 +286,20 @@ struct PortkeeperPanel: View {
                                 Spacer()
                                 Button { route.showProjectActions(group) } label: {
                                     Image(systemName: "ellipsis")
-                                        .font(.system(size: 12))
+                                        .font(.system(size: 12, design: .monospaced))
                                         .foregroundStyle(PortkeeperStyle.muted)
                                         .frame(width: 20, height: 20)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Edit or delete \(group)")
+                                Button { model.restartGroup(group) } label: {
+                                    Image(systemName: "arrow.clockwise").frame(width: 20, height: 20)
+                                }.buttonStyle(.plain)
+                                    .disabled(model.isRestartingGroup(group))
+                                    .help("Restart all services in \(group)")
                                 Button { model.toggleGroup(group) } label: {
                                     Image(systemName: model.isGroupRunning(group) ? "stop.fill" : "play.fill")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
                                         .foregroundStyle(PortkeeperStyle.ivory)
                                         .frame(width: 20, height: 20)
                                         .portkeeperChrome(radius: 7)
@@ -309,7 +335,7 @@ struct PortkeeperPanel: View {
                 .frame(width: 15)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    Text(config.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(config.name).font(.system(size: 13, weight: .semibold, design: .monospaced)).lineLimit(1)
                         .foregroundStyle(PortkeeperStyle.ivory)
                 }
                 Text(subtitle(config, state: state))
@@ -318,6 +344,9 @@ struct PortkeeperPanel: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 2)
+            Button { route.activateTerminal?(config.id) } label: { Image(systemName: "sidebar.right") }
+                .buttonStyle(.plain).foregroundStyle(PortkeeperStyle.green)
+                .frame(width: 22, height: 26).help("Make terminal active in the edge drawer")
             if case .failed = state {
                 Button { openOutput(config) } label: { Image(systemName: "terminal") }
                     .buttonStyle(.plain).foregroundStyle(PortkeeperStyle.cyan)
@@ -346,7 +375,7 @@ struct PortkeeperPanel: View {
             .frame(width: 24)
             Button { model.toggle(config) } label: {
                 Image(systemName: isRunning(state) ? "stop.fill" : "play.fill")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(isRunning(state) ? PortkeeperStyle.coral : PortkeeperStyle.ivory)
                     .frame(width: 28, height: 28)
                     .portkeeperChrome(radius: 7)
@@ -398,8 +427,8 @@ struct PortkeeperPanel: View {
 
     private var emptyServices: some View {
         VStack(spacing: 11) {
-            Image(systemName: "terminal").font(.system(size: 25, weight: .light)).foregroundStyle(PortkeeperStyle.cyan)
-            Text("No services yet").font(.system(size: 15, weight: .medium))
+            Image(systemName: "terminal").font(.system(size: 25, weight: .light, design: .monospaced)).foregroundStyle(PortkeeperStyle.cyan)
+            Text("No services yet").font(.system(size: 15, weight: .medium, design: .monospaced))
             Text("Add a command to start it from the menu bar.")
                 .font(.caption).foregroundStyle(PortkeeperStyle.muted)
             PortkeeperGlassButton(prominent: true, action: { addService() }) { Text("Add service") }
@@ -440,7 +469,7 @@ struct PortkeeperPanel: View {
                                 .foregroundStyle(PortkeeperStyle.cyan)
                                 .frame(width: 58, alignment: .leading)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(listener.process).font(.system(size: 12, weight: .semibold))
+                                Text(listener.process).font(.system(size: 12, weight: .semibold, design: .monospaced))
                                     .foregroundStyle(PortkeeperStyle.ivory).lineLimit(1)
                                 Text("\(listener.address) · PID \(String(listener.pid))").font(.system(size: 10, design: .monospaced))
                                     .foregroundStyle(PortkeeperStyle.muted).lineLimit(1)
@@ -480,19 +509,19 @@ struct PortkeeperPanel: View {
         HStack {
             PortkeeperGlassButton(prominent: true, action: { addService() }) {
                 Label("Add service", systemImage: "plus")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .fixedSize(horizontal: true, vertical: false)
             }
             Button { route.showHandoff() } label: {
                 Label("Project handoff", systemImage: "square.and.arrow.up")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(PortkeeperStyle.cyan)
             }
             .buttonStyle(.plain)
             .fixedSize()
             Spacer()
             if let notice = handoffNotice ?? model.importStatus {
-                Text(notice).font(.system(size: 10)).foregroundStyle(PortkeeperStyle.muted)
+                Text(notice).font(.system(size: 10, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
                     .lineLimit(1)
             }
             Button { route.showSettings() } label: {
@@ -503,7 +532,7 @@ struct PortkeeperPanel: View {
             .frame(width: 20)
         }
         .padding(.horizontal, 17).padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .background(Color.black)
         .overlay(alignment: .top) { PortkeeperStyle.line.opacity(0.55).frame(height: 1) }
     }
 
@@ -512,7 +541,7 @@ struct PortkeeperPanel: View {
     }
 
     private func addService(to group: String) {
-        editService(ServiceConfig(name: "", group: group, directory: "", command: "npm run dev", port: nil, url: ""))
+        editService(ServiceConfig(name: "", group: group, directory: "", command: "", port: nil, url: ""))
     }
 
     private func editService(_ config: ServiceConfig) {
@@ -524,7 +553,8 @@ struct PortkeeperPanel: View {
     }
 
     private func openOutput(_ config: ServiceConfig) {
-        route.showOutput(config.id)
+        if embedded { route.openTerminals?(config.id) }
+        else { route.showOutput(config.id) }
     }
 
     private func copyIssuePrompt(_ config: ServiceConfig, observedIssue: String? = nil) {
@@ -600,7 +630,7 @@ private struct ProjectImportPreview: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Import \(project.name)").font(.system(size: 20, weight: .semibold))
+                    Text("Import \(project.name)").font(.system(size: 20, weight: .semibold, design: .monospaced))
                     Text("Review the commands Portkeeper will be able to run.")
                         .font(.caption).foregroundStyle(PortkeeperStyle.muted)
                 }
@@ -616,7 +646,7 @@ private struct ProjectImportPreview: View {
                                 Text("\(index + 1)").font(.system(size: 10, weight: .bold, design: .monospaced))
                                     .frame(width: 19, height: 19)
                                     .background(PortkeeperStyle.well, in: Circle())
-                                Text(service.name).font(.system(size: 13, weight: .semibold))
+                                Text(service.name).font(.system(size: 13, weight: .semibold, design: .monospaced))
                                 Spacer()
                                 if let port = service.port {
                                     if let owner = listeners.first(where: { $0.port == port }) {
@@ -677,14 +707,14 @@ private struct ServiceEditor: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(isNew ? "Add service" : "Edit service")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
                     Text("A command runs in its project folder until you stop it.")
                         .font(.caption).foregroundStyle(PortkeeperStyle.muted)
                 }
                 Spacer()
             }
             VStack(alignment: .leading, spacing: 12) {
-                field("Name") { input("Frontend", text: $config.name) }
+                field("Name") { input("Service name", text: $config.name) }
                 field("Group") { input("My project", text: $config.group) }
                 field("Project folder") {
                     HStack {
@@ -698,7 +728,7 @@ private struct ServiceEditor: View {
                         .buttonStyle(.bordered)
                     }
                 }
-                field("Command") { input("npm run dev", text: $config.command) }
+                field("Command") { input("Foreground start command", text: $config.command) }
                 HStack(alignment: .top, spacing: 12) {
                     field("Expected port") { input("Optional", text: $portText) }
                     field("Open URL") { input("Optional", text: $config.url) }
@@ -751,7 +781,7 @@ private struct ServiceEditor: View {
 
     private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(PortkeeperStyle.muted)
+            Text(label).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

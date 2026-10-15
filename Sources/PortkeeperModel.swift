@@ -3,7 +3,7 @@ import Combine
 import Foundation
 import Darwin
 
-struct ServiceConfig: Codable, Identifiable, Equatable {
+struct ServiceConfig: Codable, Identifiable, Hashable {
     var id: UUID = UUID()
     var name: String
     var group: String
@@ -14,7 +14,7 @@ struct ServiceConfig: Codable, Identifiable, Equatable {
 
 }
 
-struct Listener: Identifiable, Equatable {
+struct Listener: Identifiable, Hashable {
     let pid: Int32
     let process: String
     let address: String
@@ -34,6 +34,11 @@ struct ServiceIssue: Equatable {
 }
 
 @MainActor final class PortkeeperModel: ObservableObject {
+    @Published var shareWithNotchwork = false {
+        didSet { if monitoring { UserDefaults.standard.set(shareWithNotchwork, forKey: "shareWithNotchwork") } }
+    }
+    var openNotchworkControls: (() -> Void)?
+    private var notchworkBridge: NotchworkBridge?
     @Published var configs: [ServiceConfig] = []
     @Published var listeners: [Listener] = []
     @Published var logs: [UUID: String] = [:]
@@ -45,6 +50,11 @@ struct ServiceIssue: Equatable {
     @Published var importStatus: String?
     @Published var activeIssues: [UUID: ServiceIssue] = [:]
 
+    @Published private(set) var restarting: Set<UUID> = []
+    private var launchOperations: [UUID: UUID] = [:]
+    private var restartOperations: [UUID: UUID] = [:]
+    private var inputReady: Set<UUID> = []
+    private var inputPipes: [UUID: Pipe] = [:]
     private var processes: [UUID: Process] = [:]
     private var stopping: Set<UUID> = []
     private var exitCodes: [UUID: Int32] = [:]
@@ -53,18 +63,25 @@ struct ServiceIssue: Equatable {
     private var lastScanIssueNotice: Date?
     private var lastScanIssueText: String?
     private var timer: Timer?
+    private var scanInFlight = false
+    private let logWriter = LogPersistence()
+    private var outputTokens: [UUID: UUID] = [:]
+    private var deliveries: [UUID: OutputDelivery] = [:]
+    private var diagnosticCache: [UUID: (output: String, error: String?)] = [:]
     private let configURL: URL
     private let logDirectory: URL
     private let runnerURL: URL
+    private let monitoring: Bool
 
-    init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    init(supportDirectory: URL? = nil, runner: URL? = nil, monitoring: Bool = true) {
+        self.monitoring = monitoring
+        let support = supportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Portkeeper", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         configURL = support.appendingPathComponent("configs.json")
         logDirectory = support.appendingPathComponent("Logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true)
-        runnerURL = Bundle.main.resourceURL!.appendingPathComponent("portkeeper-runner")
+        runnerURL = runner ?? Bundle.main.resourceURL!.appendingPathComponent("portkeeper-runner")
         if let data = try? Data(contentsOf: configURL), let saved = try? JSONDecoder().decode([ServiceConfig].self, from: data) {
             configs = saved
         } else {
@@ -74,15 +91,26 @@ struct ServiceIssue: Equatable {
         for config in configs {
             if let text = try? String(contentsOf: logURL(for: config.id), encoding: .utf8) { logs[config.id] = text }
         }
-        PortkeeperAlerts.shared.configure(model: self)
+        if monitoring {
+            shareWithNotchwork = UserDefaults.standard.bool(forKey: "shareWithNotchwork")
+            notchworkBridge = NotchworkBridge(model: self, directory: support)
+            PortkeeperAlerts.shared.configure(model: self)
+        }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        if monitoring {
+            timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                for config in self.configs { self.stop(config) }
+                for config in self.configs {
+                    self.stop(config)
+                    if let delivery = self.deliveries[config.id] { self.deliverOutput(delivery, for: config.id, final: true) }
+                }
+                self.notchworkBridge?.stop()
+                self.logWriter.flush()
             }
         }
     }
@@ -118,21 +146,33 @@ struct ServiceIssue: Equatable {
     }
 
     private func startInOrder(_ services: [ServiceConfig]) {
+        let token = UUID()
+        for service in services { cancelLaunch(for: service.id); launchOperations[service.id] = token }
         Task { [weak self] in
             guard let self else { return }
+            defer {
+                for service in services where launchOperations[service.id] == token { launchOperations[service.id] = nil }
+            }
+            @MainActor func current(_ service: ServiceConfig) -> Bool {
+                launchOperations[service.id] == token && configs.contains(service) && !restarting.contains(service.id)
+            }
             var started = 0
             for (index, service) in services.enumerated() {
+                guard current(service) else { return }
                 importStatus = "Starting \(service.name) (\(index + 1)/\(services.count))"
                 if stopping.contains(service.id) {
                     for _ in 0..<50 {
-                        if processes[service.id]?.isRunning != true { break }
+                        guard current(service) else { return }
+                        if processes[service.id] == nil { break }
                         try? await Task.sleep(nanoseconds: 100_000_000)
                     }
                 }
                 let current = await Task.detached(priority: .utility) { Self.scanPorts() }.value
+                guard launchOperations[service.id] == token && configs.contains(service) && !restarting.contains(service.id) else { return }
+                guard current.1 == nil else { errors[service.id] = current.1; continue }
                 listeners = current.0
                 let alreadyRunning = processes[service.id]?.isRunning == true && !stopping.contains(service.id)
-                guard alreadyRunning || start(service) else { continue }
+                guard alreadyRunning || start(service, preservingLaunch: true) else { continue }
                 started += 1
                 if let port = service.port {
                     var ready = false
@@ -140,6 +180,7 @@ struct ServiceIssue: Equatable {
                         let observed = await Task.detached(priority: .utility) {
                             Self.scanPorts().0.contains { $0.port == port }
                         }.value
+                        guard launchOperations[service.id] == token && configs.contains(service) else { return }
                         if observed { ready = true; break }
                         if processes[service.id]?.isRunning != true { break }
                         try? await Task.sleep(nanoseconds: 500_000_000)
@@ -157,13 +198,16 @@ struct ServiceIssue: Equatable {
     }
 
     func delete(_ config: ServiceConfig) {
+        cancelLaunch(for: config.id)
+        cancelRestart(for: config.id)
         if processes[config.id]?.isRunning == true { stop(config) }
         configs.removeAll { $0.id == config.id }
         activeIssues[config.id] = nil
         lastIssueNotice[config.id] = nil
         PortkeeperAlerts.shared.clear(configID: config.id)
         logs[config.id] = nil
-        try? FileManager.default.removeItem(at: logURL(for: config.id))
+        outputTokens[config.id] = nil; deliveries[config.id] = nil; diagnosticCache[config.id] = nil
+        logWriter.remove(logURL(for: config.id))
         errors[config.id] = nil
         save()
     }
@@ -189,6 +233,7 @@ struct ServiceIssue: Equatable {
     }
 
     func state(for config: ServiceConfig) -> ServiceState {
+        if restarting.contains(config.id) { return .starting }
         if let process = processes[config.id], process.isRunning {
             if let error = errors[config.id] { return .unhealthy(error) }
             if launching.contains(config.id) { return .starting }
@@ -210,11 +255,16 @@ struct ServiceIssue: Equatable {
     }
 
     func toggle(_ config: ServiceConfig) {
+        if restarting.contains(config.id) { stop(config); return }
         if processes[config.id]?.isRunning == true { stop(config) }
         else { start(config) }
     }
 
     func toggleGroup(_ group: String) {
+        if isRestartingGroup(group) {
+            for config in configs.filter({ $0.group == group }) { stop(config) }
+            return
+        }
         let members = configs.filter { $0.group == group }
         if members.contains(where: { processes[$0.id]?.isRunning == true }) {
             for config in members.reversed() { stop(config) }
@@ -228,7 +278,9 @@ struct ServiceIssue: Equatable {
         configs.contains { $0.group == group && processes[$0.id]?.isRunning == true }
     }
 
-    @discardableResult func start(_ config: ServiceConfig) -> Bool {
+    @discardableResult func start(_ config: ServiceConfig, preservingRestart: Bool = false, preservingLaunch: Bool = false) -> Bool {
+        if !preservingLaunch { cancelLaunch(for: config.id) }
+        if !preservingRestart { cancelRestart(for: config.id) }
         guard processes[config.id]?.isRunning != true else { return false }
         let path = NSString(string: config.directory).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: path) else {
@@ -246,35 +298,52 @@ struct ServiceIssue: Equatable {
         let process = Process()
         process.executableURL = runnerURL
         process.arguments = [path, config.command]
+        let input = Pipe()
+        process.standardInput = input
+        let descriptor = input.fileHandleForWriting.fileDescriptor
+        _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
+        _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+        inputReady.remove(config.id)
         logs[config.id] = "$ \(config.command)\n"
         persistLog(for: config.id)
         errors[config.id] = nil
         exitCodes[config.id] = nil
         stopping.remove(config.id)
         launching.insert(config.id)
+        let delivery = OutputDelivery()
+        let token = UUID()
+        outputTokens[config.id] = token
+        deliveries[config.id] = delivery
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                let combined = (self.logs[config.id] ?? "") + chunk
-                self.logs[config.id] = String(combined.suffix(40_000))
-                self.persistLog(for: config.id)
-                if let code = self.exitCodes[config.id] {
-                    self.errors[config.id] = self.exitMessage(for: config.id, code: code)
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                DispatchQueue.main.async {
+                    guard let self, self.outputTokens[config.id] == token else { return }
+                    self.deliverOutput(delivery, for: config.id, final: true)
+                    self.deliveries[config.id] = nil
+                }
+            } else if delivery.append(data) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    guard let self, self.outputTokens[config.id] == token else { return }
+                    self.deliverOutput(delivery, for: config.id)
                 }
             }
         }
         process.terminationHandler = { [weak self] finished in
-            pipe.fileHandleForReading.readabilityHandler = nil
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, self.processes[config.id] === finished else { return }
+                let ownsOutput = self.outputTokens[config.id] == token
+                if ownsOutput { self.deliverOutput(delivery, for: config.id) }
+                self.inputPipes.removeValue(forKey: config.id)
+                self.inputReady.remove(config.id)
                 self.launching.remove(config.id)
                 let wasStopping = self.stopping.remove(config.id) != nil
                 if self.processes[config.id] === finished { self.processes[config.id] = nil }
+                guard ownsOutput else { return }
                 if !wasStopping && finished.terminationStatus != 0 && self.errors[config.id] == nil {
                     self.exitCodes[config.id] = finished.terminationStatus
                     self.errors[config.id] = self.exitMessage(for: config.id, code: finished.terminationStatus)
@@ -287,10 +356,12 @@ struct ServiceIssue: Equatable {
         do {
             try process.run()
             processes[config.id] = process
+            inputPipes[config.id] = input
             launchedAt[config.id] = Date()
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.launching.remove(config.id)
-                self?.refresh()
+                guard let self, self.processes[config.id] === process else { return }
+                self.launching.remove(config.id)
+                self.refresh()
             }
             return true
         } catch {
@@ -300,7 +371,9 @@ struct ServiceIssue: Equatable {
         }
     }
 
-    func stop(_ config: ServiceConfig) {
+    func stop(_ config: ServiceConfig, preservingRestart: Bool = false) {
+        cancelLaunch(for: config.id)
+        if !preservingRestart { cancelRestart(for: config.id) }
         guard let process = processes[config.id], process.isRunning else { return }
         let pid = process.processIdentifier
         stopping.insert(config.id)
@@ -312,12 +385,107 @@ struct ServiceIssue: Equatable {
         errors[config.id] = nil
     }
 
+    func isRestartingGroup(_ group: String) -> Bool {
+        configs.contains { $0.group == group && restarting.contains($0.id) }
+    }
+
+    private func cancelLaunch(for id: UUID) {
+        guard let token = launchOperations[id] else { return }
+        for id in launchOperations.filter({ $0.value == token }).map(\.key) { launchOperations[id] = nil }
+    }
+
+    private func cancelRestart(for id: UUID) {
+        guard let token = restartOperations[id] else { return }
+        let ids = restartOperations.filter { $0.value == token }.map(\.key)
+        for id in ids { restartOperations[id] = nil; restarting.remove(id) }
+    }
+
+    func restart(_ config: ServiceConfig) { restartServices([config]) }
+    func restartGroup(_ group: String) { restartServices(configs.filter { $0.group == group }) }
+
+    private func restartServices(_ services: [ServiceConfig]) {
+        guard !services.isEmpty, services.allSatisfy({ !restarting.contains($0.id) }) else { return }
+        for service in services { cancelLaunch(for: service.id) }
+        let token = UUID()
+        let groups = services.compactMap { processes[$0.id]?.processIdentifier }
+        for service in services { restartOperations[service.id] = token; restarting.insert(service.id) }
+        for service in services.reversed() { stop(service, preservingRestart: true) }
+        Task { [weak self] in
+            guard let self else { return }
+            defer {
+                for service in services where restartOperations[service.id] == token {
+                    restartOperations[service.id] = nil; restarting.remove(service.id)
+                }
+                refresh()
+            }
+            @MainActor func current() -> Bool {
+                services.allSatisfy { self.restartOperations[$0.id] == token && self.configs.contains($0) }
+            }
+            // Wait for both the runner callback and its children before replacing a process.
+            for _ in 0..<80 {
+                guard current() else { return }
+                if services.allSatisfy({ self.processes[$0.id] == nil }) &&
+                    groups.allSatisfy({ kill(-$0, 0) != 0 && errno == ESRCH }) { break }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            guard current() else { return }
+            guard services.allSatisfy({ self.processes[$0.id] == nil }),
+                  groups.allSatisfy({ kill(-$0, 0) != 0 && errno == ESRCH }) else {
+                for service in services { errors[service.id] = "Restart cancelled: the previous process has not stopped." }
+                return
+            }
+            for service in services {
+                guard current() else { return }
+                let scan = await Task.detached(priority: .utility) { Self.scanPorts() }.value
+                guard current() else { return }
+                listeners = scan.0
+                if let error = scan.1 { errors[service.id] = "Restart cancelled: \(error)"; return }
+                importStatus = "Restarting \(service.name)"
+                guard start(service, preservingRestart: true) else { continue }
+                if let port = service.port {
+                    for _ in 0..<40 {
+                        guard current() else { return }
+                        let scan = await Task.detached(priority: .utility) { Self.scanPorts() }.value
+                        guard current() else { return }
+                        listeners = scan.0
+                        if listeners.contains(where: { $0.port == port && self.managedService(for: $0)?.id == service.id }) { break }
+                        if processes[service.id]?.isRunning != true { break }
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    }
+                }
+            }
+            importStatus = "Restart finished · \(services.count) services checked"
+        }
+    }
+
+    func acceptsInput(_ id: UUID) -> Bool {
+        processes[id]?.isRunning == true && inputPipes[id] != nil && inputReady.contains(id) && !stopping.contains(id) && !restarting.contains(id)
+    }
+
+    /// Sends one line to the running service's standard input; it does not launch a new shell.
+    func sendInput(_ text: String, to id: UUID) -> String? {
+        guard acceptsInput(id), let pipe = inputPipes[id] else { return "Start this service before sending input." }
+        guard !text.contains("\n"), !text.contains("\r"), !text.contains("\0") else { return "Send one line at a time." }
+        let data = Data((text + "\n").utf8)
+        guard data.count <= 512 else { return "Input must fit in 511 UTF-8 bytes." }
+        let written = data.withUnsafeBytes { bytes in
+            Darwin.write(pipe.fileHandleForWriting.fileDescriptor, bytes.baseAddress, bytes.count)
+        }
+        guard written == data.count else { return "The service is not accepting input. Try again when it is ready." }
+        logs[id] = String(((logs[id] ?? "") + "[input] " + Self.redactedDiagnosticText(text) + "\n").suffix(40_000))
+        persistLog(for: id)
+        return nil
+    }
+
+    nonisolated private static let diagnosticPattern = try! NSRegularExpression(pattern: "(?i)\\berror\\s*[:(]|\\bfatal\\s*[:(]|\\bEADDRINUSE\\b|\\buncaught\\b")
+
     nonisolated static func latestDiagnosticError(in output: String) -> String? {
         var errorLine: String?
         var crashed = false
         for raw in readableOutput(String(output.suffix(12_000))).split(separator: "\n") {
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if line.range(of: "(?i)\\berror\\s*[:(]|\\bfatal\\s*[:(]|\\bEADDRINUSE\\b|\\buncaught\\b", options: .regularExpression) != nil {
+            if line.hasPrefix("[input]") || line.hasPrefix("$ ") { continue }
+            if diagnosticPattern.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil {
                 errorLine = line
             }
             if line.localizedCaseInsensitiveContains("app crashed") { crashed = true }
@@ -342,7 +510,11 @@ struct ServiceIssue: Equatable {
     }
 
     private func recentLogError(for id: UUID) -> String? {
-        Self.latestDiagnosticError(in: logs[id] ?? "")
+        let output = logs[id] ?? ""
+        if let cached = diagnosticCache[id], cached.output == output { return cached.error }
+        let error = Self.latestDiagnosticError(in: output)
+        diagnosticCache[id] = (output, error)
+        return error
     }
 
     private func reconcileIssues() {
@@ -433,7 +605,8 @@ struct ServiceIssue: Equatable {
     }
 
     nonisolated static func readableOutput(_ output: String) -> String {
-        output.replacingOccurrences(
+        guard output.contains("\u{001B}") else { return output }
+        return output.replacingOccurrences(
             of: "\u{001B}\\[[0-9;]*[A-Za-z]",
             with: "",
             options: .regularExpression
@@ -517,10 +690,13 @@ struct ServiceIssue: Equatable {
     }
 
     func refresh() {
+        guard monitoring, !scanInFlight else { return }
+        scanInFlight = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let result = Self.scanPorts()
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.scanInFlight = false
                 if self.listeners != result.0 { self.listeners = result.0 }
                 if self.scanError != result.1 { self.scanError = result.1 }
                 self.lastScan = Date()
@@ -583,20 +759,21 @@ struct ServiceIssue: Equatable {
         logDirectory.appendingPathComponent("\(id.uuidString).log")
     }
 
+    private func deliverOutput(_ delivery: OutputDelivery, for id: UUID, final: Bool = false) {
+        let batch = delivery.drain(final: final)
+        if batch.ready, processes[id]?.isRunning == true { inputReady.insert(id) }
+        guard !batch.text.isEmpty else {
+            if batch.ready { objectWillChange.send() }
+            return
+        }
+        logs[id] = String(((logs[id] ?? "") + batch.text).suffix(40_000))
+        persistLog(for: id)
+        if let code = exitCodes[id] { errors[id] = exitMessage(for: id, code: code) }
+    }
+
     private func persistLog(for id: UUID) {
         guard let data = logs[id]?.data(using: .utf8) else { return }
-        let descriptor = Darwin.open(logURL(for: id).path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { return }
-        data.withUnsafeBytes { bytes in
-            guard let base = bytes.baseAddress else { return }
-            var offset = 0
-            while offset < data.count {
-                let written = Darwin.write(descriptor, base.advanced(by: offset), data.count - offset)
-                guard written > 0 else { break }
-                offset += written
-            }
-        }
-        _ = Darwin.close(descriptor)
+        logWriter.save(data, to: logURL(for: id))
     }
 
     private func exitMessage(for id: UUID, code: Int32) -> String {

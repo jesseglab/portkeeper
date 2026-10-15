@@ -16,12 +16,29 @@ struct ManifestService: Decodable {
 
 struct ImportedProject: Identifiable {
     let id = UUID()
-    let sourceURL: URL
+    let sourceURL: URL?
     let name: String
     let services: [ServiceConfig]
 
     static func load(from file: URL) throws -> ImportedProject {
-        let data = try Data(contentsOf: file)
+        try parse(data: Data(contentsOf: file), sourceURL: file, baseDirectory: file.deletingLastPathComponent())
+    }
+
+    static func paste(_ text: String, baseDirectory: URL? = nil) throws -> ImportedProject {
+        var json = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if json.hasPrefix("```") {
+            var lines = json.components(separatedBy: "\n")
+            guard lines.count >= 3, lines.last?.trimmingCharacters(in: .whitespaces) == "```" else {
+                throw ImportError.message("Close the JSON code block, or paste just its contents.")
+            }
+            lines.removeFirst(); lines.removeLast()
+            json = lines.joined(separator: "\n")
+        }
+        return try parse(data: Data(json.utf8), sourceURL: nil, baseDirectory: baseDirectory)
+    }
+
+    private static func parse(data: Data, sourceURL: URL?, baseDirectory: URL?) throws -> ImportedProject {
+        guard data.count <= 1_000_000 else { throw ImportError.message("Project JSON must be smaller than 1 MB.") }
         let manifest: ProjectManifest
         do { manifest = try JSONDecoder().decode(ProjectManifest.self, from: data) }
         catch { throw ImportError.invalidJSON(error.localizedDescription) }
@@ -58,7 +75,12 @@ struct ImportedProject: Identifiable {
             let path: String
             if directory.hasPrefix("~/") { path = NSString(string: directory).expandingTildeInPath }
             else if directory.hasPrefix("/") { path = directory }
-            else { path = file.deletingLastPathComponent().appendingPathComponent(directory).path }
+            else {
+                guard let baseDirectory else {
+                    throw ImportError.message("\(name): choose a project folder for relative paths, or use an absolute directory in the JSON.")
+                }
+                path = baseDirectory.appendingPathComponent(directory).path
+            }
             let standardized = URL(fileURLWithPath: path).standardizedFileURL.path
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: standardized, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -67,7 +89,7 @@ struct ImportedProject: Identifiable {
             configs.append(.init(name: name, group: project, directory: standardized,
                                  command: command, port: service.port, url: url))
         }
-        return .init(sourceURL: file, name: project, services: configs)
+        return .init(sourceURL: sourceURL, name: project, services: configs)
     }
 }
 

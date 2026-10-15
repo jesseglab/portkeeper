@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">
+<defs><linearGradient id="p" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#bbffce"/><stop offset=".6" stop-color="#6cf79b"/><stop offset="1" stop-color="#28bc65"/></linearGradient></defs>
+<rect width="1600" height="800" fill="#050a07"/>
+<path d="M0 0H586 Q610 0 610 24 V40 Q610 72 642 72 H958 Q990 72 990 40 V24 Q990 0 1014 0H1600" fill="#000"/>
+<g font-family="Menlo,monospace" font-size="17" letter-spacing="3" fill="#89b49a"><text x="80" y="120">PORTKEEPER</text><text x="80" y="155" font-size="11" letter-spacing="2">POWERED BY NOTCHWORK</text></g>
+<g fill="#edfff1" font-family="Helvetica Neue,Arial,sans-serif" font-size="105" font-weight="600" letter-spacing="-5"><text x="76" y="314">Your ports.</text><text x="76" y="426">In good hands.</text></g>
+<g fill="#9bb3a4" font-family="Helvetica Neue,Arial,sans-serif" font-size="25"><text x="81" y="498">Projects, terminals, and a little green lookout.</text></g>
+<path d="M1018 441 C1035 351 1120 295 1210 315 C1261 327 1295 350 1329 310 C1375 257 1433 308 1445 371 C1457 428 1530 464 1513 531 C1495 611 1385 623 1260 620 C1134 617 997 602 1006 526 C1008 497 1010 470 1018 441Z" fill="url(#p)"/>
+<g fill="#081c11"><rect x="1163" y="419" width="34" height="60" rx="17" transform="rotate(7 1180 450)"/><rect x="1301" y="419" width="34" height="60" rx="17" transform="rotate(7 1318 450)"/><path d="M1235 486 Q1253 508 1271 486" fill="none" stroke="#081c11" stroke-width="11" stroke-linecap="round"/></g>
+<g fill="#f1fff6" opacity=".75"><ellipse cx="1177" cy="431" rx="5" ry="8"/><ellipse cx="1315" cy="431" rx="5" ry="8"/></g>
+<path d="M80 623 H870" stroke="#24402d"/>
+<g font-family="Menlo,monospace" font-size="17"><circle cx="88" cy="670" r="5" fill="#7afa9f"/><text x="108" y="676" fill="#c4e9d0">START</text><text x="248" y="676" fill="#c4e9d0">RESTART</text><text x="425" y="676" fill="#c4e9d0">INSPECT</text><text x="606" y="676" fill="#7afa9f">KEEP BUILDING_</text></g>
+<text x="80" y="751" fill="#597964" font-family="Menlo,monospace" font-size="12" letter-spacing="2">NATIVE MACOS / BLACK &amp; GREEN / MEET PORTY</text>
+<text x="1270" y="751" fill="#597964" font-family="Menlo,monospace" font-size="12" letter-spacing="2">A LITTLE LESS CHAOS.</text>
+</svg>

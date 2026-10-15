@@ -1,0 +1,21 @@
+name: Build and privacy checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check release privacy
+        run: python3 scripts/check-release-privacy.py
+      - name: Build with the published Notchwork dependency
+        run: zsh build.sh
+      - name: Compile native regression tests
+        # UI and process regressions run locally in a graphical Mac login session.
+        run: zsh Tests/run.sh --build-only

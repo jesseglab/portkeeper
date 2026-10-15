@@ -6,6 +6,7 @@ struct ProjectActionsPage: View {
     let serviceCount: Int
     let onBack: () -> Void
     let onAdd: () -> Void
+    let onRestart: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
 
@@ -13,13 +14,14 @@ struct ProjectActionsPage: View {
         VStack(alignment: .leading, spacing: 15) {
             pageHeading(group, detail: "\(serviceCount) service\(serviceCount == 1 ? "" : "s") in this project")
             actionRow("Add service", icon: "plus", action: onAdd)
+            actionRow("Restart project", icon: "arrow.clockwise", action: onRestart)
             actionRow("Rename project", icon: "pencil", action: onRename)
             actionRow("Delete project", icon: "trash", destructive: true, action: onDelete)
             Spacer(minLength: 0)
             PortkeeperGlassButton(action: onBack) { Text("Back to services") }
         }
         .padding(22)
-        .frame(width: 420, height: 290)
+        .frame(width: 420, height: 350)
     }
 }
 
@@ -28,6 +30,8 @@ struct ServiceActionsPage: View {
     let onBack: () -> Void
     let onEdit: () -> Void
     let onOutput: () -> Void
+    let onRestart: () -> Void
+    let onActivate: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
@@ -35,12 +39,14 @@ struct ServiceActionsPage: View {
             pageHeading(config.name, detail: config.group)
             actionRow("Edit service", icon: "pencil", action: onEdit)
             actionRow("View output", icon: "terminal", action: onOutput)
+            actionRow("Restart service", icon: "arrow.clockwise", action: onRestart)
+            actionRow("Make terminal active", icon: "sidebar.right", action: onActivate)
             actionRow("Remove service", icon: "trash", destructive: true, action: onRemove)
             Spacer(minLength: 0)
             PortkeeperGlassButton(action: onBack) { Text("Back to services") }
         }
         .padding(22)
-        .frame(width: 420, height: 290)
+        .frame(width: 420, height: 400)
     }
 }
 
@@ -48,6 +54,7 @@ struct HandoffActionsPage: View {
     let onBack: () -> Void
     let onCopy: () -> Void
     let onSave: () -> Void
+    let onPaste: () -> Void
     let onImport: () -> Void
 
     var body: some View {
@@ -55,24 +62,28 @@ struct HandoffActionsPage: View {
             pageHeading("Project handoff", detail: "Give your coding platform the brief, then import its project JSON.")
             actionRow("Copy Markdown brief", icon: "doc.on.doc", action: onCopy)
             actionRow("Save Markdown brief…", icon: "square.and.arrow.down", action: onSave)
+            actionRow("Paste project JSON", icon: "curlybraces", action: onPaste)
             actionRow("Import project JSON…", icon: "square.and.arrow.up", action: onImport)
             Spacer(minLength: 0)
             PortkeeperGlassButton(action: onBack) { Text("Back to services") }
         }
         .padding(22)
-        .frame(width: 420, height: 290)
+        .frame(width: 420, height: 350)
     }
 }
 
 struct SettingsActionsPage: View {
+    @ObservedObject var model: PortkeeperModel
     let onBack: () -> Void
     let onQuit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 17) {
             pageHeading("Portkeeper", detail: "A harbour view of the local services you manage.")
+            Toggle("Share service status with Notchwork", isOn: $model.shareWithNotchwork)
+                .font(.system(size: 11, design: .monospaced))
             Text("Quitting asks Portkeeper-managed services to stop.")
-                .font(.system(size: 11))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(PortkeeperStyle.muted)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -95,11 +106,11 @@ private func actionRow(_ title: String, icon: String, destructive: Bool = false,
         HStack(spacing: 11) {
             Image(systemName: icon).frame(width: 18)
                 .foregroundStyle(destructive ? PortkeeperStyle.coral : PortkeeperStyle.ivory)
-            Text(title).font(.system(size: 12, weight: .medium))
+            Text(title).font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(destructive ? PortkeeperStyle.coral : PortkeeperStyle.ivory)
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundStyle(PortkeeperStyle.muted)
         }
         .frame(maxWidth: .infinity)
@@ -130,7 +141,7 @@ struct ProjectEditorPage: View {
         VStack(alignment: .leading, spacing: 17) {
             pageHeading("Rename project", detail: "This updates the group for \(serviceCount) service\(serviceCount == 1 ? "" : "s").")
             VStack(alignment: .leading, spacing: 6) {
-                Text("Project name").font(.system(size: 11, weight: .medium))
+                Text("Project name").font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(PortkeeperStyle.muted)
                 TextField("Project name", text: $name)
                     .textFieldStyle(.plain)
@@ -141,7 +152,7 @@ struct ProjectEditorPage: View {
             }
             if !valid {
                 Text("Use a unique name of up to 80 characters.")
-                    .font(.system(size: 10)).foregroundStyle(PortkeeperStyle.coral)
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(PortkeeperStyle.coral)
             }
             Spacer()
             HStack {
@@ -176,12 +187,12 @@ struct DeleteProjectPage: View {
         VStack(alignment: .leading, spacing: 16) {
             pageHeading("Delete project?", detail: "\(group) contains \(serviceCount) service\(serviceCount == 1 ? "" : "s").")
             VStack(alignment: .leading, spacing: 6) {
-                Text(group).font(.system(size: 15, weight: .semibold))
+                Text(group).font(.system(size: 15, weight: .semibold, design: .monospaced))
                 Text("Its saved services and Portkeeper logs will be removed.")
-                    .font(.system(size: 11)).foregroundStyle(PortkeeperStyle.muted)
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
                 if runningCount > 0 {
                     Text("\(runningCount) running service\(runningCount == 1 ? "" : "s") will be asked to stop.")
-                        .font(.system(size: 11)).foregroundStyle(PortkeeperStyle.coral)
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(PortkeeperStyle.coral)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -211,11 +222,11 @@ struct DeleteServicePage: View {
         VStack(alignment: .leading, spacing: 16) {
             pageHeading("Remove service?", detail: "Remove \(config.name) from \(config.group).")
             VStack(alignment: .leading, spacing: 6) {
-                Text(config.name).font(.system(size: 15, weight: .semibold))
+                Text(config.name).font(.system(size: 15, weight: .semibold, design: .monospaced))
                 Text(config.command).font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(PortkeeperStyle.muted).lineLimit(2)
                 Text("A running process will be asked to stop. Its saved output will be removed.")
-                    .font(.system(size: 11)).foregroundStyle(PortkeeperStyle.muted)
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(13)
@@ -239,49 +250,31 @@ struct ServiceOutputPage: View {
     let config: ServiceConfig
     @ObservedObject var model: PortkeeperModel
     let onBack: () -> Void
+    let onPin: () -> Void
     @State private var copied = false
-
+    @State private var fontSize = 11.0
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 9) {
-                PortkeeperGlassButton(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .frame(width: 16, height: 16)
-                }
-                Text("Output · \(config.name)").font(.system(size: 17, weight: .semibold))
-                    .lineLimit(1)
-                Spacer()
-                PortkeeperGlassButton(action: copyPrompt) {
-                    Label(copied ? "Copied" : "Copy AI prompt", systemImage: copied ? "checkmark" : "sparkles")
-                        .font(.system(size: 11, weight: .medium))
-                }
-            }
-            ScrollView {
-                Text(PortkeeperModel.readableOutput(model.logs[config.id] ?? "No output yet."))
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(13)
-            }
-            .background(PortkeeperStyle.well, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(PortkeeperStyle.line.opacity(0.7), lineWidth: 1))
+        VStack(spacing: 12) {
             HStack {
-                Text("Recent output · secrets are redacted in AI prompts")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(PortkeeperStyle.muted)
+                Button(action: onBack) { Image(systemName: "chevron.left") }.help("Back to services")
+                Text(config.name).font(.system(size: 17, weight: .semibold, design: .monospaced)).lineLimit(1)
                 Spacer()
-                PortkeeperGlassButton(action: onBack) { Text("Back to services") }
+                Button(action: onPin) { Label("Pin", systemImage: "pin") }
+                Button(copied ? "Copied" : "Copy AI prompt") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(PortkeeperModel.troubleshootingPrompt(for: config, output: model.logs[config.id] ?? ""), forType: .string)
+                    copied = true
+                }
             }
-        }
-        .padding(19)
-        .frame(width: 620, height: 480)
-    }
-
-    private func copyPrompt() {
-        let prompt = PortkeeperModel.troubleshootingPrompt(for: config, output: model.logs[config.id] ?? "")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(prompt, forType: .string)
-        copied = true
+            TerminalLogView(output: model.logs[config.id] ?? "", fontSize: fontSize)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Text("Recent output · AI prompts redact secrets").font(.system(size: 10, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
+                Spacer()
+                Button("A−") { fontSize = max(9, fontSize - 1) }.help("Smaller terminal text")
+                Button("A+") { fontSize = min(18, fontSize + 1) }.help("Larger terminal text")
+            }
+        }.padding(19).frame(width: 620, height: 480)
     }
 }
 
@@ -300,11 +293,11 @@ struct StopListenerPage: View {
             } ?? "Portkeeper will ask this process to quit gracefully.")
             VStack(alignment: .leading, spacing: 6) {
                 Text("\(listener.process) · PID \(listener.pid)")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 Text(listener.address).font(.system(size: 11, design: .monospaced))
                 if !otherPorts.isEmpty {
                     Text("It also listens on \(otherPorts.map { ":\($0)" }.joined(separator: ", ")).")
-                        .font(.system(size: 11)).foregroundStyle(PortkeeperStyle.muted)
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -350,8 +343,8 @@ struct StopResultPage: View {
 
 private func pageHeading(_ title: String, detail: String) -> some View {
     VStack(alignment: .leading, spacing: 5) {
-        Text(title).font(.system(size: 20, weight: .semibold))
-        Text(detail).font(.system(size: 11)).foregroundStyle(PortkeeperStyle.muted)
+        Text(title).font(.system(size: 20, weight: .semibold, design: .monospaced))
+        Text(detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(PortkeeperStyle.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

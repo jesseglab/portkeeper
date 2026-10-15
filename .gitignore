@@ -6,3 +6,15 @@ dist/
 .env.*
 configs.json
 portkeeper.json
+
+.build/
+.swiftpm/
+
+# Local runtime state and private handoffs
+notchwork.json
+connection.json
+Logs/
+*.local.json
+*.local.plist
+*.xcuserstate
+xcuserdata/
