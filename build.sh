@@ -28,6 +28,8 @@ cp "$BIN_DIR/Portkeeper" "$APP/Contents/MacOS/Portkeeper"
 NOTCHWORK_RESOLVED="${NOTCHWORK_PACKAGE_PATH:-$BUILD_DIR/build/checkouts/notchwork}"
 mkdir -p "$APP/Contents/Resources/Notchwork"
 cp "$NOTCHWORK_RESOLVED/LICENSE" "$NOTCHWORK_RESOLVED/NOTICE" "$APP/Contents/Resources/Notchwork/"
+# SwiftPM checkouts are read-only; the copied resources must allow signature preparation.
+chmod u+w "$APP/Contents/Resources/Notchwork/LICENSE" "$APP/Contents/Resources/Notchwork/NOTICE"
 sips -s format png -z 64 64 Assets/Porty/porty-icon-v2.png --out "$APP/Contents/Resources/Porty.png" >/dev/null
 clang -O2 Sources/runner.c -o "$APP/Contents/Resources/portkeeper-runner"
 
