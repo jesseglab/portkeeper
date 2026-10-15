@@ -16,6 +16,8 @@ jobs:
         run: python3 scripts/check-release-privacy.py
       - name: Build with the published Notchwork dependency
         run: zsh build.sh
+      - name: Build and verify drag-and-drop installer
+        run: zsh scripts/build-dmg.sh
       - name: Compile native regression tests
         # UI and process regressions run locally in a graphical Mac login session.
         run: zsh Tests/run.sh --build-only

@@ -17,3 +17,10 @@
 - The handoff template has no fixed ports, folders, or commands. Optional preview services use explicitly synthetic fixtures.
 - Source and the built app pass `python3 scripts/check-release-privacy.py`. The build rejects local configuration files, log files, and absolute home-directory paths. This is a targeted release guard, not a general secret scanner.
 - Git history was reviewed for bundled user configuration and private project paths. Only generic example ports and commands appeared in the prior published version; those examples have been removed from the prepared update.
+
+## DMG packaging
+
+- The disk image and contained app signature verify.
+- Every app file matches the existing release ZIP.
+- Applications shortcut, Finder icon positions, hidden Retina artwork, and metadata privacy checks pass.
+- A branded drag-and-drop installer and illustrated README instructions are included.

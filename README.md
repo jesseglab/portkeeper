@@ -46,7 +46,21 @@ Portkeeper batches service output, bounds pending data, and prevents overlapping
 
 ## Get started
 
-Download the Apple silicon development build from the release page, or build from source with macOS 14+ and Xcode’s Swift toolchain:
+### Install with drag and drop
+
+1. [Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.0/Portkeeper-1.3.0-arm64-development.dmg) and open it.
+2. Drag **Portkeeper** onto **Applications** in the installer window.
+3. Eject the disk, then open **Portkeeper** from Applications.
+
+![Portkeeper installer layout: drag the app to Applications.](docs/assets/installer.png)
+
+*Illustrated installer layout. Finder icons and colors follow your macOS appearance.*
+
+The DMG is a drag-and-drop installer; it does not run scripts or start services. This development app is ad-hoc signed and not notarized, so macOS may block it on first launch. Packaging it as a DMG does not change that signing status.
+
+### Build from source
+
+Build from source with macOS 14+, Apple silicon, and Xcode’s Swift toolchain:
 
 ```sh
 git clone https://github.com/jesseglab/portkeeper.git

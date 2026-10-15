@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480">
+<rect width="720" height="480" fill="#080d0a"/>
+<path d="M258 0 H462 V8 Q462 27 443 27 H277 Q258 27 258 8Z" fill="#122219"/>
+<g fill="#83f9ac"><rect x="229" width="13" height="5" rx="2.5"/><rect x="478" width="13" height="5" rx="2.5"/></g>
+<g font-family="Helvetica Neue, Helvetica, sans-serif">
+<text x="48" y="64" font-size="13" font-weight="600" letter-spacing="2.5" fill="#83f9ac">PORTKEEPER</text>
+<path d="M628 57 C628 40 644 36 653 43 C670 37 681 53 675 68 Q671 78 655 77 Q634 79 629 69Z" fill="#83f9ac"/><rect x="643" y="53" width="6" height="11" rx="3" fill="#080d0a"/><rect x="657" y="53" width="6" height="11" rx="3" fill="#080d0a"/>
+<text x="46" y="117" font-size="38" font-weight="600" letter-spacing="-1.4" fill="#edf5ed">A little less chaos.</text>
+<text x="48" y="149" font-size="16" fill="#a8bfaf">Drag Portkeeper into Applications.</text>
+<g fill="#0c1710" stroke="#253e2d"><circle cx="204" cy="258" r="73"/><circle cx="516" cy="258" r="73"/></g>
+<g fill="#bcd5c3"><rect x="135" y="314" width="138" height="30" rx="15"/><rect x="447" y="314" width="138" height="30" rx="15"/></g>
+<path d="M320 258 H400 M387 245 L400 258 L387 271" fill="none" stroke="#83f9ac" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="360" y="231" text-anchor="middle" font-size="9" letter-spacing="1.5" fill="#83f9ac">DRAG TO INSTALL</text>
+<path d="M48 382 H672" stroke="#26382c"/>
+<text x="48" y="416" font-size="15" fill="#edf5ed">Then open it from Applications.</text>
+<text x="48" y="444" font-size="12" fill="#91a898">Once copied, eject this disk. You’re all set.</text>
+<text x="672" y="444" text-anchor="end" font-size="10" letter-spacing="1" fill="#91a898">MADE FOR MAC</text>
+</g></svg>
