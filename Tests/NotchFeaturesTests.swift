@@ -108,6 +108,13 @@ extension TerminalWorkspaceTests {
         panels.collapseNotch()
         try? await Task.sleep(nanoseconds: 300_000_000)
         expect(!panels.state.drawerExpanded && !panels.state.expanded, "Both panels collapse without stopping services")
+        model.shareWithNotchwork = true
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        expect(!panels.notch.isVisible && !panels.drawer.isVisible, "Shared-host mode hides both embedded surfaces")
+        let hiddenHandle = CGPoint(x: panels.notch.frame.midX, y: panels.notch.frame.midY)
+        panels.tick(at: CGPoint(x: panels.notch.frame.maxX + 100, y: panels.notch.frame.minY - 100))
+        panels.tick(at: hiddenHandle)
+        expect(!panels.state.expanded && !panels.notch.isVisible, "Hovering the hidden embedded notch cannot reopen Portkeeper in shared-host mode")
         panels.shutdown()
         print("All notch, paste, restart, and terminal input tests passed.")
     }

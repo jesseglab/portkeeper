@@ -7,7 +7,7 @@
 - Status snapshots validate against the typed Notchwork API and include Portkeeper’s own panel without exporting logs or commands.
 - The release build links NotchworkKit statically and bundles its LICENSE and NOTICE.
 - The README cover is an original vector illustration, exported to PNG. It is not an application screenshot. The small Porty image is a resized copy of the existing app icon.
-- The dependency is pinned to Notchwork 0.1.0. The release build resolves the published Git tag; an explicit local checkout override remains available for SDK development.
+- The dependency is pinned to Notchwork 0.1.1. The release build resolves the published Git tag; an explicit local checkout override remains available for SDK development.
 - The installed Portkeeper app has not been replaced or restarted. Publishing does not install the update locally.
 - Ad-hoc signatures only. Developer ID signing and notarization remain outside scope.
 
@@ -24,3 +24,9 @@
 - Every app file matches the existing release ZIP.
 - Applications shortcut, Finder icon positions, hidden Retina artwork, and metadata privacy checks pass.
 - A branded drag-and-drop installer and illustrated README instructions are included.
+
+## 1.3.1 hover correction
+
+- All 121 native checks passed on 15 October 2026 with NotchworkKit 0.1.1.
+- The shared-host regression verifies that moving the pointer through the hidden embedded notch cannot reopen Portkeeper.
+- Opening uses the compact handle; expanded content retains its normal interaction area. The SDK tests also cover both drawer edges and re-entry during collapse.

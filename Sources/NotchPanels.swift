@@ -121,11 +121,13 @@ struct NotchGeometry {
         notch.contentView = notchSurface
         drawer.contentView = drawerSurface
         notchSurface.onPointerEntered = { [weak self] in
-            guard let self, !self.state.expanded, !self.notchSuppressed else { return }
+            guard let self, !self.state.expanded, !self.notchSuppressed,
+                  self.notchSurface.containsHoverPoint(NSEvent.mouseLocation, expanded: false) else { return }
             self.showNotch(focus: false)
         }
         drawerSurface.onPointerEntered = { [weak self] in
-            guard let self, !self.state.drawerExpanded, !self.drawerSuppressed else { return }
+            guard let self, !self.state.drawerExpanded, !self.drawerSuppressed,
+                  self.drawerSurface.containsHoverPoint(NSEvent.mouseLocation, expanded: false) else { return }
             self.expandDrawer()
         }
         drawerSurface.onSettled = { [weak self] in
@@ -242,13 +244,13 @@ struct NotchGeometry {
         guard panel.isKeyWindow else { return false }
         return (panel.firstResponder as? NSTextView)?.isEditable == true
     }
-    private func tick() {
+    func tick(at pointer: CGPoint? = nil) {
         let now = Date()
         // Modal pickers and open menus keep their owning surface stable.
         guard NSApp.modalWindow == nil, !NSApp.windows.contains(where: { $0.isVisible && $0.className.contains("Menu") }) else { return }
-        let point = NSEvent.mouseLocation
+        let point = pointer ?? NSEvent.mouseLocation
         notchSurface.updatePointerPassThrough(); drawerSurface.updatePointerPassThrough()
-        let overNotch = notchSurface.containsScreenPoint(point)
+        let overNotch = notchSurface.containsHoverPoint(point, expanded: state.expanded)
         if !overNotch { notchSuppressed = false }
         if overNotch {
             outsideNotch = nil
@@ -257,7 +259,7 @@ struct NotchGeometry {
             if outsideNotch == nil { outsideNotch = now }
             if now.timeIntervalSince(outsideNotch!) >= 0.6 { collapseNotch() }
         }
-        let overDrawer = drawer.isVisible && drawerSurface.containsScreenPoint(point)
+        let overDrawer = drawerSurface.containsHoverPoint(point, expanded: state.drawerExpanded)
         if !overDrawer { drawerSuppressed = false }
         if overDrawer {
             outsideDrawer = nil

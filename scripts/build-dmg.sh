@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "${0:A:h}/.."
 APP_NAME="Portkeeper"
-VERSION="1.3.0"
+VERSION="1.3.1"
 ARCH="$(uname -m)"
 INPUT="${1:-$PWD/dist/$APP_NAME.zip}"
 OUTPUT="${2:-$PWD/dist/$APP_NAME-$VERSION-$ARCH-development.dmg}"

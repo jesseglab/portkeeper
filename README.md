@@ -6,7 +6,7 @@ Portkeeper keeps your local projects, services, and terminals close. Start a pro
 
 **macOS 14+ · Apple silicon · Native SwiftUI · Powered by [Notchwork](https://github.com/jesseglab/notchwork)**
 
-[Download v1.3.0](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.0) · [Get started](#get-started) · [Use with Notchwork](#one-app-two-homes) · [Full guide](docs/GUIDE.md)
+[Download v1.3.1](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.1) · [Get started](#get-started) · [Use with Notchwork](#one-app-two-homes) · [Full guide](docs/GUIDE.md)
 
 ## Less hunting. More building.
 
@@ -48,7 +48,7 @@ Portkeeper batches service output, bounds pending data, and prevents overlapping
 
 ### Install with drag and drop
 
-1. [Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.0/Portkeeper-1.3.0-arm64-development.dmg) and open it.
+1. [Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.1/Portkeeper-1.3.1-arm64-development.dmg) and open it.
 2. Drag **Portkeeper** onto **Applications** in the installer window.
 3. Eject the disk, then open **Portkeeper** from Applications.
 
@@ -69,7 +69,7 @@ zsh build.sh
 open dist/Portkeeper.app
 ```
 
-The build produces `dist/Portkeeper.app` and `dist/Portkeeper.zip`, including Notchwork's license notices. The SDK is linked into Portkeeper; users do not need to install it separately. The host app is required only for shared-host mode. The dependency is pinned to Notchwork **0.1.0**. For SDK development, set `NOTCHWORK_PACKAGE_PATH=/path/to/notchwork` explicitly.
+The build produces `dist/Portkeeper.app` and `dist/Portkeeper.zip`, including Notchwork's license notices. The SDK is linked into Portkeeper; users do not need to install it separately. The host app is required only for shared-host mode. The dependency is pinned to Notchwork **0.1.1**. For SDK development, set `NOTCHWORK_PACKAGE_PATH=/path/to/notchwork` explicitly.
 
 Builds are ad-hoc signed and not notarized; macOS may block downloaded binaries. No services start automatically. Configurations and logs live in `~/Library/Application Support/Portkeeper/`. Updating a running Portkeeper requires quitting it first, which stops its managed services.
 
