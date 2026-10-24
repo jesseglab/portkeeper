@@ -2,9 +2,9 @@
 import PackageDescription
 import Foundation
 
-let localNotchwork = ProcessInfo.processInfo.environment["NOTCHWORK_PACKAGE_PATH"]
-let notchwork: Package.Dependency = localNotchwork.map { .package(name: "notchwork", path: $0) }
-    ?? .package(url: "https://github.com/jesseglab/notchwork.git", exact: "0.1.1")
+// Coordinated source distribution: both repositories are supplied side by side.
+let localNotchwork = ProcessInfo.processInfo.environment["NOTCHWORK_PACKAGE_PATH"] ?? "../notchwork"
+let notchwork = Package.Dependency.package(name: "notchwork", path: localNotchwork)
 let package = Package(name: "Portkeeper", platforms: [.macOS(.v14)], products: [
     .executable(name: "Portkeeper", targets: ["Portkeeper"])
 ], dependencies: [notchwork], targets: [

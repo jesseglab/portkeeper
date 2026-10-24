@@ -10,11 +10,22 @@ jobs:
   macos:
     runs-on: macos-15
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portkeeper
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: portkeeper
+      - name: Check out the matching Notchwork prerequisite
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: jesseglab/notchwork
+          ref: ecf34eadf12bf167ae9e68efb6f04e2eee151971
+          path: notchwork
       - name: Check release privacy
         run: python3 scripts/check-release-privacy.py
-      - name: Build with the published Notchwork dependency
+      - name: Build with the pinned Notchwork runtime and SDK
         run: zsh build.sh
       - name: Build and verify drag-and-drop installer
         run: zsh scripts/build-dmg.sh

@@ -1,20 +1,33 @@
 import Foundation
+import NotchworkKit
 
 extension TerminalWorkspaceTests {
     @MainActor static func runNotchworkBridgeTests() async {
+        expect(NotchworkBridge.priority(issues: 1, starting: 1).rank == 2, "Issues take high priority over startup")
+        expect(NotchworkBridge.priority(issues: 0, starting: 1).rank == 1, "Starting services send mid priority")
+        expect(NotchworkBridge.priority(issues: 0, starting: 0).rank == 0, "Healthy and idle services send low priority")
         let model = makeModel()
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("portkeeper-bridge-\(UUID().uuidString)")
-        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let bridge = NotchworkBridge(model: model, directory: directory, connectionFile: nil)
-        defer { bridge.stop() }
-        let file = directory.appendingPathComponent("notchwork.json")
-        let service = config("Worker", "Live bridge", "sleep 10")
+        let service = config("Worker", "API bridge", "sleep 10")
         model.configs = [service]
         model.logs[service.id] = "SECRET_TOKEN=should-not-leave-portkeeper"
-        expect(!FileManager.default.fileExists(atPath: file.path), "Notchwork sharing is off by default")
-        expect(!NotchworkBridge.perform("service.start", value: service.id.uuidString, model: model), "Host callbacks cannot act while sharing is off")
-        model.shareWithNotchwork = true
+        let fake = NotchworkClient(connection: .init(endpoint: "http://127.0.0.1:1", token: "test"))
+        var commands: [HostCommand] = []
+        var generation = 1
+        var failConnection = false
+        let bridge = NotchworkBridge(model: model, connect: {
+            NotchworkClient(connection: .init(endpoint: fake.connection.endpoint, token: "test-\(generation)"))
+        }, send: { _, command in
+            if command.operation == "events" {
+                try await Task.sleep(nanoseconds: 30_000_000)
+                if failConnection { failConnection = false; throw ActivityError.invalid("Test disconnect") }
+            } else { commands.append(command) }
+            return HostResponse(ok: true, message: "Test", events: [])
+        })
+        defer { bridge.stop() }
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        expect(commands.first?.operation == "register", "Bridge registers its UI before publication")
+        expect(commands.first?.registration?.customInterface == true, "Registration declares the app-owned interface")
+        expect(commands.contains { $0.operation == "publish" }, "Portkeeper publishes directly through the API")
         expect(!NotchworkBridge.perform("run-shell", value: "echo unsafe", model: model), "Unknown custom actions cannot execute commands")
         expect(!NotchworkBridge.perform("service.start", value: UUID().uuidString, model: model), "Custom actions reject unknown service identities")
         expect(NotchworkBridge.perform("service.start", value: service.id.uuidString, model: model), "Custom UI callback starts a real managed service")
@@ -23,27 +36,29 @@ extension TerminalWorkspaceTests {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         bridge.update(force: true)
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        let data = try! Data(contentsOf: file)
-        let snapshot = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let card = snapshot["activity"] as! [String: Any]
-        expect(card["sourceID"] as? String == "app.portkeeper", "Bridge publishes the real Portkeeper source")
-        expect((card["details"] as? [String])?.first?.contains("Running") == true, "Bridge reflects a running managed service")
-        expect(card["interface"] != nil, "Bridge carries Portkeeper’s own interface")
-        let custom = PortkeeperNotchworkUI.interface(model)
-        expect((try? custom.validate()) != nil, "Portkeeper interface fits the shared host limits")
-        expect(PortkeeperNotchworkUI.escape("<script>\"&") == "&lt;script&gt;&quot;&amp;", "Project and service labels cannot inject HTML")
-        let text = String(data: data, encoding: .utf8)!
-        expect(!text.contains("SECRET_TOKEN") && !text.contains("sleep 10"), "Bridge excludes logs and commands")
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        let card = commands.last(where: { $0.operation == "publish" })!.activity!
+        expect(card.sourceID == "app.portkeeper" && card.details.first?.contains("Running") == true, "API publication reflects running managed services")
+        expect(card.interface != nil, "Portkeeper supplies its own interface")
+        let text = String(data: try! JSONEncoder().encode(card), encoding: .utf8)!
+        expect(!text.contains("SECRET_TOKEN") && !text.contains("sleep 10"), "API excludes logs and commands")
+        let before = commands.filter { $0.operation == "publish" }.count
+        bridge.update()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        expect(commands.filter { $0.operation == "publish" }.count == before, "Unchanged model does not republish")
         model.errors[service.id] = "SECRET_TOKEN=private diagnostic"
         bridge.update(force: true)
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        let failure = String(data: try! Data(contentsOf: file), encoding: .utf8)!
-        expect(failure.contains("urgent") && !failure.contains("private diagnostic"), "Service failure becomes priority without diagnostic contents")
-        expect(NotchworkBridge.perform("service.stop", value: service.id.uuidString, model: model), "Custom UI callback stops its managed service")
-        model.shareWithNotchwork = false
-        bridge.update()
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        expect(!FileManager.default.fileExists(atPath: file.path), "Disconnect removes the bridge snapshot")
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        expect(commands.last(where: { $0.operation == "publish" })?.activity?.priority == .high, "Service failure sends high priority")
+        try! await bridge.present()
+        expect(commands.suffix(3).map(\.operation) == ["register", "publish", "present"], "Explicit opening uses the host API, never a local notch")
+        generation = 2; failConnection = true
+        try? await Task.sleep(nanoseconds: 5_300_000_000)
+        expect(commands.filter { $0.operation == "register" }.count >= 3, "Bridge re-registers after host reconnect")
+        expect(NotchworkBridge.perform("service.stop", value: service.id.uuidString, model: model), "Custom UI callback stops its service")
+        bridge.stop()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        expect(commands.last?.operation == "remove", "Shutdown removes Portkeeper from the shared host")
+        print("All Notchwork API bridge tests passed.")
     }
 }

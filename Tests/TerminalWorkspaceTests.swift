@@ -4,7 +4,6 @@ import SwiftUI
 
 @main struct TerminalWorkspaceTests {
     @MainActor static var controller: TerminalWorkspaceController?
-    @MainActor static var panels: NotchPanelController?
     @MainActor static var model: PortkeeperModel?
     @MainActor static func expect(_ value: @autoclosure () -> Bool, _ message: String) {
         if !value() { if let model { for config in model.configs { model.stop(config) } }; fputs("FAIL: \(message)\n", stderr); exit(1) }
@@ -22,7 +21,7 @@ import SwiftUI
             if CommandLine.arguments.contains("--preview") { preview() }
             else if CommandLine.arguments.contains("--porty-preview") { previewPorty() }
             else if CommandLine.arguments.contains("--performance") { await runPerformanceProbe(); app.terminate(nil) }
-            else { await runNotchworkBridgeTests(); await runPortyTests(); await runTests(); await runNotchTests(); await runMotionTests(); await runOutputDeliveryTests(); app.terminate(nil) }
+            else { await runRuntimeTests(); await runNotchworkBridgeTests(); await runPortyTests(); await runTests(); await runNotchTests(); await runOutputDeliveryTests(); app.terminate(nil) }
         }
         app.run()
     }
@@ -99,7 +98,7 @@ import SwiftUI
         selectionWindow.close()
         let model = makeModel()
         self.model = model
-        expect(model.configs.isEmpty && model.logs.isEmpty && !model.shareWithNotchwork, "Fresh profile has no bundled services, logs, or sharing preference")
+        expect(model.configs.isEmpty && model.logs.isEmpty, "Fresh profile has no bundled services or logs")
         model.upsert(a); model.upsert(b)
         expect(model.start(a) && model.start(b), "Launch two real runner processes")
         for _ in 0..<30 {
@@ -144,13 +143,6 @@ import SwiftUI
         controller.state.preferences.density = .comfortable
         controller.state.preferences.grouping = .project
         controller.state.activeTerminals = Set(services.map(\.id))
-        let route = PortkeeperPanelRoute()
-        let panels = NotchPanelController(model: model, route: route, terminals: controller)
-        self.panels = panels
-        route.activateTerminal = { panels.activateTerminal($0) }
-        route.openTerminals = { id in if let id { panels.activateTerminal(id) } else { panels.expandDrawer() } }
-        panels.state.pinned = true
-        panels.showNotch()
-        panels.expandDrawer()
+        controller.show()
     }
 }

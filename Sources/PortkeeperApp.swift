@@ -346,7 +346,7 @@ struct PortkeeperPanel: View {
             Spacer(minLength: 2)
             Button { route.activateTerminal?(config.id) } label: { Image(systemName: "sidebar.right") }
                 .buttonStyle(.plain).foregroundStyle(PortkeeperStyle.green)
-                .frame(width: 22, height: 26).help("Make terminal active in the edge drawer")
+                .frame(width: 22, height: 26).help("Open terminal workspace")
             if case .failed = state {
                 Button { openOutput(config) } label: { Image(systemName: "terminal") }
                     .buttonStyle(.plain).foregroundStyle(PortkeeperStyle.cyan)

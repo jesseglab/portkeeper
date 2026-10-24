@@ -140,9 +140,8 @@ struct TerminalCard: View {
     @ObservedObject var workspace: TerminalWorkspaceState
     var popOut: (() -> Void)?
     var detached = false
-    var edge = false
     @State private var copiedPrompt = false
-    private var color: Color { edge ? PortkeeperStyle.green : TerminalPalette.colors[workspace.colorIndex(config.id)] }
+    private var color: Color { TerminalPalette.colors[workspace.colorIndex(config.id)] }
     private var collapsed: Bool { !detached && workspace.preferences.collapsed.contains(config.id) }
     var body: some View {
         VStack(spacing: 0) {
@@ -162,9 +161,6 @@ struct TerminalCard: View {
                 Text(model.state(for: config).terminalLabel)
                     .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(model.state(for: config).terminalIssue ? PortkeeperStyle.coral : color)
                 Menu {
-                    Button(workspace.activeTerminals.contains(config.id) ? "Remove from edge drawer" : "Make terminal active") {
-                        if !workspace.activeTerminals.insert(config.id).inserted { workspace.activeTerminals.remove(config.id) }
-                    }
                     Button("Restart service") { model.restart(config) }.disabled(model.restarting.contains(config.id))
                     Button(model.state(for: config).terminalActive ? "Stop service" : "Start service") { model.toggle(config) }
                     Picker("Color", selection: Binding(get: { workspace.colorIndex(config.id) }, set: { workspace.preferences.colors[config.id] = $0 })) {
@@ -185,7 +181,7 @@ struct TerminalCard: View {
                     }
                 } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
                     .help("Terminal color, order, and actions").accessibilityLabel("Actions for \(config.name)")
-                if !detached && !edge {
+                if !detached {
                     Button { workspace.unpin(config.id) } label: { Image(systemName: "pin.slash") }
                         .help("Unpin terminal; service keeps running").accessibilityLabel("Unpin \(config.name)")
                 }

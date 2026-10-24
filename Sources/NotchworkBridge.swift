@@ -2,27 +2,45 @@ import Foundation
 import Combine
 import NotchworkKit
 
-/// Shares only service names and states. Commands, paths, logs, and diagnostics stay in Portkeeper.
+/// Portkeeper owns its content and actions. Only the Notchwork process owns the notch window.
 @MainActor final class NotchworkBridge {
+    typealias Connect = @MainActor () async throws -> NotchworkClient
+    typealias Send = @MainActor (NotchworkClient, HostCommand) async throws -> HostResponse
     private weak var model: PortkeeperModel?
     private var observation: AnyCancellable?
+    private var worker: Task<Void, Never>?
+    private var publication: Task<Void, Never>?
+    private var publicationGeneration = UUID()
     private var timer: Timer?
-    private var actionTask: Task<Void, Never>?
-    private var cursor: UInt64 = 0
-    private var connectionToken: String?
-    private static let icon = Bundle.main.url(forResource: "Porty", withExtension: "png").flatMap { try? Data(contentsOf: $0) }?.base64EncodedString()
+    private var client: NotchworkClient?
+    private var stopped = false
     private var lastPayload: Data?
-    private var cleared = false
-    private let file: URL
-    private let connectionFile: URL?
-    private let queue = DispatchQueue(label: "Portkeeper.NotchworkBridge", qos: .utility)
-    init(model: PortkeeperModel, directory: URL, connectionFile: URL? = HostConnection.defaultFile) {
-        self.model = model; self.connectionFile = connectionFile
-        file = directory.appendingPathComponent("notchwork.json")
+    private var pending: NotchActivity?
+    private let connect: Connect
+    private let send: Send
+    private static let icon = Bundle.main.url(forResource: "Porty", withExtension: "png").flatMap { try? Data(contentsOf: $0) }?.base64EncodedString()
+    init(model: PortkeeperModel, connect: @escaping Connect = NotchworkBridge.connectRuntime,
+         send: @escaping Send = { try await $0.send($1) }) {
+        self.model = model; self.connect = connect; self.send = send
         observation = model.objectWillChange.throttle(for: .seconds(1), scheduler: RunLoop.main, latest: true).sink { [weak self] _ in
             DispatchQueue.main.async { self?.update() }
         }
-        update()
+        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update(force: true) }
+        }
+        worker = Task { [weak self] in await self?.run() }
+    }
+    static func connectRuntime() async throws -> NotchworkClient {
+        try await NotchworkRuntime.ensureRunning()
+        for _ in 0..<30 {
+            try Task.checkCancellation()
+            if let connection = try? HostConnection.discover() {
+                let client = NotchworkClient(connection: connection)
+                if let response = try? await client.send(HostCommand(operation: "ping")), (response.apiVersion ?? 0) >= 2 { return client }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        throw ActivityError.invalid("Notchwork has not started its API. Retry from Portkeeper settings.")
     }
     static func activity(_ model: PortkeeperModel) -> [String: Any] {
         var running = 0, starting = 0, issues = 0
@@ -45,74 +63,85 @@ import NotchworkKit
                 "title": issues > 0 ? "\(issues) need attention" : "\(running) running",
                 "subtitle": "\(starting) starting · \(model.configs.count) services",
                 "symbol": issues > 0 ? "exclamationmark.triangle.fill" : "terminal",
-                "priority": issues > 0 ? "urgent" : "normal", "preferredSide": "right",
+                "priority": Self.priority(issues: issues, starting: starting).rawValue, "preferredSide": "right",
                 "details": details, "actions": [], "ttl": 60]
         let interface = PortkeeperNotchworkUI.interface(model)
         if let data = try? JSONEncoder().encode(interface), let object = try? JSONSerialization.jsonObject(with: data) { result["interface"] = object }
         if let icon { result["iconPNG"] = icon }
         return result
     }
-    func update(force: Bool = false) {
-        guard let model, model.shareWithNotchwork else {
-            timer?.invalidate(); timer = nil; lastPayload = nil
-            actionTask?.cancel(); actionTask = nil; cursor = 0; connectionToken = nil
-            if !cleared {
-                cleared = true
-                let file = file
-                queue.async { try? FileManager.default.removeItem(at: file) }
-            }
-            return
-        }
-        cleared = false
-        if actionTask == nil && connectionFile != nil {
-            actionTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    guard let self else { return }
-                    let connected = await self.readActions()
-                    if !connected {
-                        do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+    // Legacy wire values remain compatible with Notchwork 0.1.1; the new host
+    // presents them as high, mid, and low notifications respectively.
+    static func priority(issues: Int, starting: Int) -> ActivityPriority {
+        issues > 0 ? .urgent : (starting > 0 ? .important : .normal)
+    }
+
+    private func run() async {
+        while !Task.isCancelled && !stopped {
+            do {
+                model?.notchworkStatus = "Connecting to Notchwork…"
+                let connected = try await connect()
+                try Task.checkCancellation()
+                _ = try await send(connected, HostCommand(operation: "register", registration:
+                    SourceRegistration(id: "app.portkeeper", name: "Portkeeper", customInterface: true)))
+                client = connected; lastPayload = nil
+                model?.notchworkStatus = "Notchwork connected"
+                update(force: true)
+                var cursor: UInt64 = 0
+                while !Task.isCancelled && client?.connection.token == connected.connection.token {
+                    let response = try await send(connected, HostCommand(operation: "events", sourceID: "app.portkeeper", after: cursor, wait: true))
+                    try Task.checkCancellation()
+                    guard let model else { return }
+                    for event in (response.events ?? []).sorted(by: { $0.sequence < $1.sequence }) {
+                        cursor = max(cursor, event.sequence)
+                        guard event.sourceID == "app.portkeeper", event.activityID == "services",
+                              (0..<30).contains(Date().timeIntervalSince1970 - event.createdAt) else { continue }
+                        Self.perform(event.action, value: event.value, model: model)
                     }
                 }
+            } catch {
+                if Task.isCancelled || stopped { return }
+                publication?.cancel(); publication = nil; publicationGeneration = UUID(); pending = nil
+                client = nil; lastPayload = nil
+                model?.notchworkStatus = error.localizedDescription
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
             }
-        }
-        if timer == nil {
-            timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.update(force: true) }
-            }
-            timer?.tolerance = 2
-        }
-        let card = Self.activity(model)
-        guard let payload = try? JSONSerialization.data(withJSONObject: card, options: .sortedKeys), force || payload != lastPayload else { return }
-        lastPayload = payload
-        guard let activity = try? JSONDecoder().decode(NotchActivity.self, from: payload),
-              (try? activity.validate()) != nil,
-              let data = try? JSONEncoder().encode(ActivitySnapshot(activity: activity)) else { return }
-        let file = file
-        queue.async {
-            do {
-                try data.write(to: file, options: [.atomic, .completeFileProtectionUnlessOpen])
-                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-            } catch { /* The next heartbeat retries; service management never depends on the bridge. */ }
         }
     }
-    private func readActions() async -> Bool {
-        do {
-            guard let connectionFile else { return false }
-            let connection = try HostConnection.discover(at: connectionFile)
-            if connectionToken != connection.token { cursor = 0; connectionToken = connection.token }
-            let events = try await NotchworkClient(connection: connection).events(sourceID: "app.portkeeper", after: cursor, wait: true)
-            guard !Task.isCancelled, let model, model.shareWithNotchwork else { return false }
-            for event in events.sorted(by: { $0.sequence < $1.sequence }) {
-                cursor = max(cursor, event.sequence)
-                guard event.sourceID == "app.portkeeper", event.activityID == "services",
-                      Date().timeIntervalSince1970 - event.createdAt < 30 else { continue }
-                Self.perform(event.action, value: event.value, model: model)
+    func update(force: Bool = false) {
+        guard !stopped, let model, let client,
+              let payload = try? JSONSerialization.data(withJSONObject: Self.activity(model), options: .sortedKeys),
+              force || payload != lastPayload,
+              let activity = try? JSONDecoder().decode(NotchActivity.self, from: payload) else { return }
+        pending = activity; lastPayload = payload
+        guard publication == nil else { return }
+        let generation = UUID(); publicationGeneration = generation
+        publication = Task { [weak self] in
+            guard let self else { return }
+            defer { if self.publicationGeneration == generation { self.publication = nil } }
+            do {
+                while let activity = self.pending, !Task.isCancelled {
+                    self.pending = nil
+                    _ = try await self.send(client, HostCommand(operation: "publish", activity: activity))
+                }
+            } catch {
+                guard self.publicationGeneration == generation, !Task.isCancelled else { return }
+                self.client = nil; self.lastPayload = nil
+                self.model?.notchworkStatus = error.localizedDescription
             }
-            return true
-        } catch { return false }
+        }
+    }
+    func present() async throws {
+        guard !stopped, let model else { return }
+        let connected = try await connect()
+        _ = try await send(connected, HostCommand(operation: "register", registration:
+            SourceRegistration(id: "app.portkeeper", name: "Portkeeper", customInterface: true)))
+        let data = try JSONSerialization.data(withJSONObject: Self.activity(model))
+        let activity = try JSONDecoder().decode(NotchActivity.self, from: data)
+        _ = try await send(connected, HostCommand(operation: "publish", activity: activity))
+        _ = try await send(connected, HostCommand(operation: "present", sourceID: "app.portkeeper", id: "services"))
     }
     @discardableResult static func perform(_ action: String, value: String, model: PortkeeperModel) -> Bool {
-        guard model.shareWithNotchwork else { return false }
         if action == "open" { model.openNotchworkControls?(); return true }
         if action == "project.restart" {
             guard model.configs.contains(where: { $0.group == value }) else { return false }
@@ -127,9 +156,14 @@ import NotchworkKit
         }
         return true
     }
+
     func stop() {
-        actionTask?.cancel(); actionTask = nil
-        timer?.invalidate(); timer = nil; observation?.cancel(); observation = nil
-        queue.sync { try? FileManager.default.removeItem(at: file) }
+        stopped = true; worker?.cancel(); publication?.cancel(); timer?.invalidate(); observation?.cancel()
+        worker = nil; publication = nil; pending = nil
+        if let client {
+            let send = send
+            Task { _ = try? await send(client, HostCommand(operation: "remove", sourceID: "app.portkeeper", id: "services")) }
+        }
+        client = nil
     }
 }

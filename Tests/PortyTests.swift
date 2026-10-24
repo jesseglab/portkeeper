@@ -10,7 +10,7 @@ extension TerminalWorkspaceTests {
         expect(PortyMood.resolve([.running, .unhealthy("error")], hasIssue: false) == .attention, "Unhealthy services trigger Porty's concerned expression")
         expect(PortyMood.resolve([.running], hasIssue: true) == .attention, "Port scans and active issues also trigger attention")
 
-        let panel = EdgePanel(title: "Porty · Animation tests")
+        let panel = AnimationTestWindow()
         let face = PortyNativeView(frame: CGRect(x: 0, y: 0, width: 80, height: 60))
         panel.contentView = face
         panel.setFrame(CGRect(x: 80, y: 80, width: 80, height: 60), display: false)
@@ -58,5 +58,18 @@ extension TerminalWorkspaceTests {
         window.contentView = NSHostingView(rootView: view)
         window.center(); window.makeKeyAndOrderFront(nil)
         portyPreviewWindow = window
+    }
+}
+
+@MainActor private final class AnimationTestWindow: NSWindow {
+    init() {
+        super.init(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
+    }
+    override func orderOut(_ sender: Any?) {
+        super.orderOut(sender); (contentView as? PortyNativeView)?.refreshVisibility()
+    }
+    override func orderFrontRegardless() {
+        super.orderFrontRegardless(); (contentView as? PortyNativeView)?.refreshVisibility()
     }
 }

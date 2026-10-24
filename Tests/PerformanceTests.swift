@@ -10,9 +10,6 @@ extension TerminalWorkspaceTests {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let workspace = TerminalWorkspaceController(model: model, defaults: defaults)
-        let route = PortkeeperPanelRoute()
-        let panels = NotchPanelController(model: model, route: route, terminals: workspace)
-        self.panels = panels
         func cpu() -> Double {
             var usage = rusage(); getrusage(RUSAGE_SELF, &usage)
             return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
@@ -40,15 +37,11 @@ extension TerminalWorkspaceTests {
         let subscription = model.$logs.dropFirst().sink { _ in publications += 1 }
         for service in services { model.start(service) }
         await sample("collapsed-streams", seconds: 3)
-        panels.state.pinned = true; panels.showNotch(focus: false); panels.expandDrawer()
-        let keepOpen = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in
-            MainActor.assumeIsolated { panels.expandDrawer() }
-        }
+        workspace.show()
         await sample("visible-streams", seconds: 3)
-        keepOpen.invalidate()
         print("PERF log-publications=\(publications)")
         subscription.cancel()
         for service in services { model.stop(service) }
-        panels.shutdown()
+
     }
 }

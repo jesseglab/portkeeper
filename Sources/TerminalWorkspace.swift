@@ -57,6 +57,9 @@ import SwiftUI
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
+    func showIssue(_ id: UUID, message: String?) { route.showService(id, message: message); show(id: id) }
+    func showPorts() { route.showPorts(); show() }
+    func showSettings() { route.showSettings(); show() }
     func pinActive() { state.pin(model.configs.filter { model.state(for: $0).terminalActive }.map(\.id)) }
     func openDetached(_ config: ServiceConfig) {
         if let existing = detached[config.id] { existing.makeKeyAndOrderFront(nil); return }

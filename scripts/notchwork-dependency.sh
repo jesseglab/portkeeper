@@ -1,8 +1,8 @@
 # Copy local SDK sources out of cloud-synced folders before compiling.
-# Published builds resolve the declared Git dependency when no local checkout is supplied.
+# Coordinated source builds expect the matching Notchwork checkout beside Portkeeper.
 prepare_notchwork() {
   local task_build="$1"
-  local task_sdk="${NOTCHWORK_PACKAGE_PATH:-}"
+  local task_sdk="${NOTCHWORK_PACKAGE_PATH:-$PWD/../notchwork}"
   if [[ -n "$task_sdk" ]]; then
     [[ -f "$task_sdk/Package.swift" && -f "$task_sdk/LICENSE" ]] || { print -u2 'Invalid NOTCHWORK_PACKAGE_PATH'; return 1; }
     mkdir -p "$task_build/Notchwork"

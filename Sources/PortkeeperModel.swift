@@ -34,9 +34,7 @@ struct ServiceIssue: Equatable {
 }
 
 @MainActor final class PortkeeperModel: ObservableObject {
-    @Published var shareWithNotchwork = false {
-        didSet { if monitoring { UserDefaults.standard.set(shareWithNotchwork, forKey: "shareWithNotchwork") } }
-    }
+    @Published var notchworkStatus = "Starting Notchwork…"
     var openNotchworkControls: (() -> Void)?
     private var notchworkBridge: NotchworkBridge?
     @Published var configs: [ServiceConfig] = []
@@ -92,8 +90,6 @@ struct ServiceIssue: Equatable {
             if let text = try? String(contentsOf: logURL(for: config.id), encoding: .utf8) { logs[config.id] = text }
         }
         if monitoring {
-            shareWithNotchwork = UserDefaults.standard.bool(forKey: "shareWithNotchwork")
-            notchworkBridge = NotchworkBridge(model: self, directory: support)
             PortkeeperAlerts.shared.configure(model: self)
         }
         refresh()
@@ -113,6 +109,15 @@ struct ServiceIssue: Equatable {
                 self.logWriter.flush()
             }
         }
+    }
+
+    func startNotchwork() {
+        guard notchworkBridge == nil else { return }
+        notchworkBridge = NotchworkBridge(model: self)
+    }
+    func presentNotchwork() async throws {
+        startNotchwork()
+        try await notchworkBridge?.present()
     }
 
     func save() {
@@ -782,5 +787,13 @@ struct ServiceIssue: Equatable {
         let detail = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .last { !$0.isEmpty && !$0.hasPrefix("$") }
         return detail.map { "Exited \(code) · \(String(Self.redactedDiagnosticText($0).prefix(120)))" } ?? "Exited with code \(code)"
+    }
+}
+
+extension PortkeeperModel {
+    var hasAttentionIssue: Bool {
+        !activeIssues.isEmpty || scanError != nil || configs.contains {
+            switch state(for: $0) { case .failed, .unhealthy, .occupied: return true; default: return false }
+        }
     }
 }

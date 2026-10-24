@@ -19,7 +19,7 @@ if [[ -z "${NOTCHWORK_PACKAGE_PATH:-}" ]]; then
 fi
 swift build -c debug --product NotchworkKit --package-path "$NOTCHWORK_PACKAGE_PATH" --scratch-path "$TEST_SOURCE/sdk-build" -Xswiftc -enable-testing
 SDK_BIN=$(swift build -c debug --package-path "$NOTCHWORK_PACKAGE_PATH" --scratch-path "$TEST_SOURCE/sdk-build" --show-bin-path)
-swiftc -I "$SDK_BIN/Modules" -L "$SDK_BIN" -lNotchworkKit -O -D PORTKEEPER_TEST -swift-version 5 -target arm64-apple-macos14.0 -module-cache-path /tmp/portkeeper-test-module-cache "$TEST_SOURCE"/Sources/*.swift "$TEST_SOURCE"/Tests/*.swift -o "$TEST_BUILD/Contents/MacOS/TerminalTests"
+swiftc -I "$SDK_BIN/Modules" -L "$SDK_BIN" -lNotchworkKit -O -D PORTKEEPER_TEST -swift-version 5 -target "$(uname -m)-apple-macos14.0" -module-cache-path "$TEST_SOURCE/module-cache" "$TEST_SOURCE"/Sources/*.swift "$TEST_SOURCE"/Tests/*.swift -o "$TEST_BUILD/Contents/MacOS/TerminalTests"
 if [[ -f dist/Portkeeper.app/Contents/Resources/AppIcon.icns ]]; then
   cp dist/Portkeeper.app/Contents/Resources/AppIcon.icns "$TEST_BUILD/Contents/Resources/AppIcon.icns"
 fi

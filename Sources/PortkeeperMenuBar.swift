@@ -92,38 +92,26 @@ enum PortkeeperPage: Hashable {
         let model = PortkeeperModel()
         let menuBar = PortkeeperMenuBar(model: model)
         self.menuBar = menuBar
-        model.openNotchworkControls = { [weak menuBar] in menuBar?.openPanel() }
+        model.openNotchworkControls = { [weak menuBar] in menuBar?.openWorkspace() }
         PortkeeperAlerts.shared.menuBar = menuBar
+        model.startNotchwork()
     }
 }
 
 @MainActor final class PortkeeperMenuBar: NSObject {
     private let model: PortkeeperModel
     private let terminals: TerminalWorkspaceController
-    private let route = PortkeeperPanelRoute()
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    private var notch: NotchPanelController!
     private var observation: AnyCancellable?
 
     init(model: PortkeeperModel) {
         self.model = model
         self.terminals = TerminalWorkspaceController(model: model)
         super.init()
-        notch = NotchPanelController(model: model, route: route, terminals: terminals)
-        route.openTerminals = { [weak self] id in
-            guard let self else { return }
-            if let id { notch.activateTerminal(id) }
-            else {
-                terminals.state.activeTerminals.formUnion(model.configs.filter { model.state(for: $0).terminalActive }.map(\.id))
-                notch.expandDrawer()
-            }
-            notch.collapseNotch()
-        }
-        route.activateTerminal = { [weak self] id in self?.notch.activateTerminal(id); self?.notch.collapseNotch() }
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
         item.button?.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "Portkeeper")
-        item.button?.toolTip = "Open Portkeeper at the notch"
+        item.button?.toolTip = "Open Portkeeper in Notchwork"
         observation = model.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -131,8 +119,17 @@ enum PortkeeperPage: Hashable {
             }
         }
     }
-    @objc private func togglePanel() { notch.toggleNotch() }
-    func openServiceIssue(_ id: UUID, message: String?) { route.showService(id, message: message); notch.showNotch() }
-    func openScanIssue() { route.showPorts(); notch.showNotch() }
-    func openPanel() { notch.showNotch() }
+    @objc private func togglePanel() { openPanel() }
+    func openServiceIssue(_ id: UUID, message: String?) { terminals.showIssue(id, message: message) }
+    func openScanIssue() { terminals.showPorts() }
+    func openWorkspace() { terminals.show() }
+    func openPanel() {
+        Task {
+            do { try await model.presentNotchwork() }
+            catch {
+                model.notchworkStatus = error.localizedDescription
+                terminals.showSettings()
+            }
+        }
+    }
 }

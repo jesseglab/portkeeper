@@ -17,6 +17,21 @@ export SWIFT_MODULE_CACHE_PATH="$BUILD_DIR/.module-cache"
 
 cp Sources/Info.plist "$APP/Contents/Info.plist"
 cp Sources/Portkeeper-setup.md "$APP/Contents/Resources/Portkeeper-setup.md"
+# Ship the same runtime that provides the SDK used for this build.
+RUNTIME_SOURCE="${NOTCHWORK_PACKAGE_PATH:-$PWD/../notchwork}"
+[[ -f "$RUNTIME_SOURCE/Package.swift" ]] || { print -u2 "Missing Notchwork checkout. Clone jesseglab/notchwork beside portkeeper or set NOTCHWORK_PACKAGE_PATH. See docs/NOTCHWORK.md."; exit 1; }
+if [[ -n "${NOTCHWORK_RUNTIME_APP_PATH:-}" ]]; then
+  RUNTIME_APP="$NOTCHWORK_RUNTIME_APP_PATH"
+else
+  zsh "$RUNTIME_SOURCE/build.sh"
+  RUNTIME_APP="$RUNTIME_SOURCE/dist/Notchwork.app"
+fi
+[[ -x "$RUNTIME_APP/Contents/MacOS/Notchwork" ]] || { print -u2 "Missing Notchwork prerequisite app"; exit 1; }
+ditto --norsrc "$RUNTIME_APP" "$BUILD_DIR/Notchwork-runtime.app"
+RUNTIME_APP="$BUILD_DIR/Notchwork-runtime.app"
+xattr -cr "$RUNTIME_APP"
+[[ "$(/usr/bin/plutil -extract NotchworkAPIVersion raw "$RUNTIME_APP/Contents/Info.plist")" -ge 2 ]] || { print -u2 "Notchwork API 2 is required"; exit 1; }
+/usr/bin/codesign --verify --deep --strict "$RUNTIME_APP"
 source scripts/notchwork-dependency.sh
 prepare_notchwork "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/project"
@@ -28,6 +43,7 @@ cp "$BIN_DIR/Portkeeper" "$APP/Contents/MacOS/Portkeeper"
 NOTCHWORK_RESOLVED="${NOTCHWORK_PACKAGE_PATH:-$BUILD_DIR/build/checkouts/notchwork}"
 mkdir -p "$APP/Contents/Resources/Notchwork"
 cp "$NOTCHWORK_RESOLVED/LICENSE" "$NOTCHWORK_RESOLVED/NOTICE" "$APP/Contents/Resources/Notchwork/"
+ditto --norsrc "$RUNTIME_APP" "$APP/Contents/Resources/Notchwork/Notchwork.app"
 # SwiftPM checkouts are read-only; the copied resources must allow signature preparation.
 chmod u+w "$APP/Contents/Resources/Notchwork/LICENSE" "$APP/Contents/Resources/Notchwork/NOTICE"
 sips -s format png -z 64 64 Assets/Porty/porty-icon-v2.png --out "$APP/Contents/Resources/Porty.png" >/dev/null

@@ -80,8 +80,13 @@ struct SettingsActionsPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 17) {
             pageHeading("Portkeeper", detail: "A harbour view of the local services you manage.")
-            Toggle("Share service status with Notchwork", isOn: $model.shareWithNotchwork)
-                .font(.system(size: 11, design: .monospaced))
+            Text(model.notchworkStatus).font(.system(size: 11, design: .monospaced))
+            Button("Open Notchwork / Retry") {
+                Task {
+                    do { try await model.presentNotchwork() }
+                    catch { model.notchworkStatus = error.localizedDescription }
+                }
+            }
             Text("Quitting asks Portkeeper-managed services to stop.")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(PortkeeperStyle.muted)
