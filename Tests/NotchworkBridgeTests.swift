@@ -172,10 +172,14 @@ extension TerminalWorkspaceTests {
             expect(model.configs.count == 1, "Review cannot import or run a service")
             try await screenshot("parity-import-review")
             try await click("[data-page=back]")
-            model.logs[model.configs[0].id] = "[ready] Worker is ready\n[info] Waiting for requests\n[warning] Example warning"
+            model.logs[model.configs[0].id] = "\u{1B}[32m[ready] Worker is ready\u{1B}[0m\n[info] Waiting for requests\n[warning] Example warning"
             try await click("[data-action=service][data-op=more]")
             try await click("[data-page=output]")
             try await screenshot("parity-output")
+            let coloredOutput = try await web.evaluateJavaScript("document.querySelector('#output span').style.color") as? String
+            expect(coloredOutput == "rgb(107, 217, 140)", "Hosted output preserves native ANSI terminal colors")
+            let plainText = try await web.evaluateJavaScript("plainOutput(state.route.output).includes(String.fromCharCode(27))") as? Bool
+            expect(plainText == false, "Copied output strips terminal control codes")
             let webResult2 = try await web.evaluateJavaScript("document.querySelector('[data-log-query=output]')!==null") as? Bool
             expect(webResult2 == true, "Hosted output retains search, filters, wrapping, copy, and follow controls")
             try await click("[data-page=back]")

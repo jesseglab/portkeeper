@@ -65,7 +65,7 @@ import UniformTypeIdentifiers
         if let id = UUID(uuidString: identity), let config = model.configs.first(where: { $0.id == id }) {
             result["name"] = config.name; result["group"] = config.group
             if page == "serviceDelete" { result["command"] = config.command }
-            if page == "output" { result["output"] = PortkeeperModel.readableOutput(model.logs[id] ?? "") }
+            if page == "output" { result["output"] = TerminalOutput.normalized(model.logs[id] ?? "") }
         }
         if page == "serviceEditor" { result["isNew"] = !editingExisting }
         if page.hasPrefix("project") {
@@ -90,7 +90,7 @@ import UniformTypeIdentifiers
             result["fontSize"] = terminalState?.preferences.fontSize ?? 11
             result["terminals"] = model.configs.filter { active.contains($0.id) }.map { config -> [String: Any] in
                 ["id": config.id.uuidString, "name": config.name, "group": config.group,
-                 "output": PortkeeperModel.readableOutput(model.logs[config.id] ?? ""),
+                 "output": TerminalOutput.normalized(model.logs[config.id] ?? ""),
                  "active": model.state(for: config).terminalActive, "input": model.acceptsInput(config.id),
                  "inputDraft": terminalInputs[config.id.uuidString] ?? "", "command": config.command, "port": config.port.map(String.init) ?? "",
                  "status": model.state(for: config).terminalLabel, "issue": model.state(for: config).terminalIssue,
