@@ -6,9 +6,9 @@ Portkeeper keeps your local projects, services, and terminals close. Start a pro
 
 **macOS 14+ · Apple silicon · Powered by [Notchwork](https://github.com/jesseglab/notchwork)**
 
-[Releases](https://github.com/jesseglab/portkeeper/releases) · [Get started](#get-started) · [Use with Notchwork](#one-app-one-shared-notch) · [Full guide](docs/GUIDE.md)
+[Download v1.3.3](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.3) · [Get started](#get-started) · [Use with Notchwork](#one-app-one-shared-notch) · [Full guide](docs/GUIDE.md)
 
-> **Current development version:** the default branch contains **1.3.3, build 11**, using the shared Notchwork runtime. The downloadable **v1.3.1** release predates this change. Build both repositories below for the current version.
+> **Downloadable development preview:** Portkeeper **1.3.3, build 11**, includes the matching Notchwork runtime. [Download the DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.dmg) or [ZIP](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.zip). No source build or separate prerequisite download is needed. These binaries are ad-hoc signed and have not been notarized; macOS may block them on first launch.
 
 ## Less hunting. More building.
 
@@ -48,7 +48,21 @@ Portkeeper batches service output, bounds pending data, and prevents overlapping
 
 ## Get started
 
-### Build the current version
+### Install with drag and drop
+
+[Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.dmg). The [release page](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.3) also includes a ZIP and SHA-256 checksums.
+
+1. Download the DMG and open it.
+2. Drag **Portkeeper** onto **Applications** in the installer window.
+3. Eject the disk, then open **Portkeeper** from Applications.
+
+![Portkeeper installer layout: drag the app to Applications.](docs/assets/installer.png)
+
+*Illustrated installer layout. Finder icons and colors follow your macOS appearance.*
+
+The DMG is a drag-and-drop installer; it does not run scripts or start services. This development app is ad-hoc signed and not notarized, so macOS may block it on first launch. Packaging it as a DMG does not change that signing status.
+
+### Build from source
 
 Build from source with macOS 14+, Apple silicon, and Xcode’s Swift toolchain. Clone the current development branches side by side:
 
@@ -65,20 +79,6 @@ The build produces `dist/Portkeeper.app` and `dist/Portkeeper.zip`, including th
 Portkeeper requires **Notchwork 0.2.0 build 9 or newer**, with the `interface-forms` capability. First-run installation needs no administrator permission or network download. An incompatible existing destination is preserved and reported in settings; an older running runtime must quit before a newer version can take over. [Installation and compatibility details.](docs/NOTCHWORK.md)
 
 Builds are ad-hoc signed and not notarized; macOS may block downloaded binaries. No services start automatically. Configurations and logs live in `~/Library/Application Support/Portkeeper/`. Updating a running Portkeeper requires quitting it first, which stops its managed services.
-
-### Install a published release with drag and drop
-
-The [v1.3.1 Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.1/Portkeeper-1.3.1-arm64-development.dmg) remains available for the earlier version. It predates the required shared runtime; use the source build above for the current version.
-
-1. Download the DMG and open it.
-2. Drag **Portkeeper** onto **Applications** in the installer window.
-3. Eject the disk, then open **Portkeeper** from Applications.
-
-![Portkeeper installer layout: drag the app to Applications.](docs/assets/installer.png)
-
-*Illustrated installer layout. Finder icons and colors follow your macOS appearance.*
-
-The DMG is a drag-and-drop installer; it does not run scripts or start services. This development app is ad-hoc signed and not notarized, so macOS may block it on first launch. Packaging it as a DMG does not change that signing status.
 
 ## For developers
 
