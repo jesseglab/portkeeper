@@ -36,6 +36,10 @@ struct ServiceIssue: Equatable {
 @MainActor final class PortkeeperModel: ObservableObject {
     @Published var notchworkStatus = "Starting Notchwork…"
     var openNotchworkControls: (() -> Void)?
+    var openNotchworkPage: ((String, String) -> Void)?
+    @Published var notchworkTab = "services"
+    @Published var notchworkSearch = ""
+    @Published var notchworkNotice = ""
     private var notchworkBridge: NotchworkBridge?
     @Published var configs: [ServiceConfig] = []
     @Published var listeners: [Listener] = []

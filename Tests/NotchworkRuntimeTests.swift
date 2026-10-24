@@ -10,7 +10,7 @@ extension TerminalWorkspaceTests {
             try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
-            let plist: [String: Any] = ["CFBundleIdentifier": NotchworkRuntime.bundleID, "CFBundleExecutable": "Notchwork", "CFBundlePackageType": "APPL", "NotchworkAPIVersion": 2]
+            let plist: [String: Any] = ["CFBundleIdentifier": NotchworkRuntime.bundleID, "CFBundleExecutable": "Notchwork", "CFBundlePackageType": "APPL", "NotchworkAPIVersion": 2, "CFBundleVersion": "8"]
             try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: bundled.appendingPathComponent("Contents/Info.plist"))
             var verifications = 0
             let result = try NotchworkRuntime.install(bundled: bundled, candidates: [], destination: installed, verify: { _ in verifications += 1 })

@@ -57,6 +57,23 @@ import SwiftUI
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
+    func showPage(_ page: String, identity: String) {
+        switch page {
+        case "add": route.showEditor(ServiceConfig(name: "", group: "My services", directory: "", command: "", port: nil, url: ""))
+        case "handoff": route.showHandoff()
+        case "settings": route.showSettings()
+        case "ports": route.showPorts()
+        case "project": guard model.configs.contains(where: { $0.group == identity }) else { return }; route.showProjectActions(identity)
+        case "listener": guard let listener = model.listeners.first(where: { $0.id == identity }) else { return }; route.confirmStop(listener)
+        case "terminal", "more":
+            guard let id = UUID(uuidString: identity), let config = model.configs.first(where: { $0.id == id }) else { return }
+            if page == "terminal" { route.back(); show(id: id); return }
+            route.showServiceActions(config)
+        case "workspace": route.back()
+        default: return
+        }
+        show()
+    }
     func showIssue(_ id: UUID, message: String?) { route.showService(id, message: message); show(id: id) }
     func showPorts() { route.showPorts(); show() }
     func showSettings() { route.showSettings(); show() }

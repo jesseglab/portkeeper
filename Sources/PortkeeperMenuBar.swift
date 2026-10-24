@@ -93,6 +93,7 @@ enum PortkeeperPage: Hashable {
         let menuBar = PortkeeperMenuBar(model: model)
         self.menuBar = menuBar
         model.openNotchworkControls = { [weak menuBar] in menuBar?.openWorkspace() }
+        model.openNotchworkPage = { [weak menuBar] page, identity in menuBar?.openPage(page, identity: identity) }
         PortkeeperAlerts.shared.menuBar = menuBar
         model.startNotchwork()
     }
@@ -123,6 +124,7 @@ enum PortkeeperPage: Hashable {
     func openServiceIssue(_ id: UUID, message: String?) { terminals.showIssue(id, message: message) }
     func openScanIssue() { terminals.showPorts() }
     func openWorkspace() { terminals.show() }
+    func openPage(_ page: String, identity: String) { terminals.showPage(page, identity: identity) }
     func openPanel() {
         Task {
             do { try await model.presentNotchwork() }

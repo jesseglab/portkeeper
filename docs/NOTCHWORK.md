@@ -30,3 +30,11 @@ Start from [the generic quickstart](https://github.com/jesseglab/notchwork/blob/
 Portkeeper’s normal terminal/workspace UI remains native. Its shared-notch controls are offline HTML rendered by Notchwork; this is not a pixel-for-pixel copy of the removed native notch panels.
 
 CI checks out a tested Notchwork revision beside Portkeeper before building. Local builds accept a sibling checkout or `NOTCHWORK_PACKAGE_PATH`. For distribution, use a tested matching SDK/runtime revision, include license notices, and follow [the distribution guide](https://github.com/jesseglab/notchwork/blob/main/docs/DISTRIBUTION.md).
+
+## Dashboard fidelity and runtime requirement
+
+The shared notch uses Portkeeper’s original 400 × 590 dashboard proportions, header, Services/Ports tabs, project groups, compact rows, and action placement. Live state is separate from HTML so updates preserve the tab, filter, and scroll position. The dashboard includes all normal-sized workspaces; unusually large payloads disclose overflow with a link to the full native workspace. Commands, logs, and diagnostic secrets stay in Portkeeper.
+
+This client requires Notchwork 0.2.0 build 8 or newer for live interface state. Existing Custom UI opt-outs are preserved; the host presents an explicit Enable controls action instead of silently pretending the fallback is the app UI.
+
+Service/project editors, listener stop confirmations, handoff tools, and terminal sessions use the existing native workspace. They are not yet embedded notch pages; the dashboard routes to the correct native page and selected service. The app still creates no independent notch window.

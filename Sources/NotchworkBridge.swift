@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 import NotchworkKit
 
@@ -36,7 +37,12 @@ import NotchworkKit
             try Task.checkCancellation()
             if let connection = try? HostConnection.discover() {
                 let client = NotchworkClient(connection: connection)
-                if let response = try? await client.send(HostCommand(operation: "ping")), (response.apiVersion ?? 0) >= 2 { return client }
+                if let response = try? await client.send(HostCommand(operation: "ping")), (response.apiVersion ?? 0) >= 2 {
+                    guard response.capabilities?.contains("interface-state") == true else {
+                        throw ActivityError.invalid("Update and restart Notchwork (0.2.0 build 8 or newer) to show Portkeeper’s dashboard.")
+                    }
+                    return client
+                }
             }
             try await Task.sleep(nanoseconds: 200_000_000)
         }
@@ -54,7 +60,7 @@ import NotchworkKit
             case .occupied: issues += 1; state = "Port occupied"
             case .stopped: state = "Stopped"
             }
-            return String("\(config.group) / \(config.name) · \(state)".prefix(500))
+            return String("\(config.group) / \(config.name) · \(state)".prefix(160))
         }
         var details = Array(rows.prefix(29))
         if rows.count > 29 { details.append("\(rows.count - 29) more services in Portkeeper") }
@@ -142,7 +148,57 @@ import NotchworkKit
         _ = try await send(connected, HostCommand(operation: "present", sourceID: "app.portkeeper", id: "services"))
     }
     @discardableResult static func perform(_ action: String, value: String, model: PortkeeperModel) -> Bool {
-        if action == "open" { model.openNotchworkControls?(); return true }
+        if action == "refresh" { model.refresh(); return true }
+        if ["ui", "service", "project", "listener", "open"].contains(action),
+           let data = value.data(using: .utf8),
+           let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: String] {
+            if action == "ui" {
+                guard let tab = payload["tab"], ["services", "ports"].contains(tab),
+                      let query = payload["query"], query.utf8.count <= 256 else { return false }
+                model.notchworkTab = tab; model.notchworkSearch = query; return true
+            }
+            let operation = payload["op"] ?? "", identity = payload["id"] ?? ""
+            func copy(_ text: String, notice: String) {
+                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+                model.notchworkNotice = notice
+            }
+            if action == "open" {
+                guard ["add", "handoff", "settings", "workspace", "ports"].contains(operation) else { return false }
+                model.openNotchworkPage?(operation, ""); return true
+            }
+            if action == "project" {
+                guard model.configs.contains(where: { $0.group == identity }) else { return false }
+                switch operation {
+                case "restart": model.restartGroup(identity)
+                case "start": if !model.isGroupRunning(identity) { model.toggleGroup(identity) }
+                case "stop": if model.isGroupRunning(identity) { model.toggleGroup(identity) }
+                case "more": model.openNotchworkPage?("project", identity)
+                default: return false
+                }
+                return true
+            }
+            if action == "listener" {
+                guard let listener = model.listeners.first(where: { $0.id == identity }) else { return false }
+                switch operation {
+                case "ai": copy(model.explanationPrompt(for: listener), notice: "Port \(listener.port) prompt copied")
+                case "stop": model.openNotchworkPage?("listener", identity)
+                default: return false
+                }
+                return true
+            }
+            guard let id = UUID(uuidString: identity), let config = model.configs.first(where: { $0.id == id }) else { return false }
+            switch operation {
+            case "start": if case .occupied = model.state(for: config) { return false }; model.start(config)
+            case "stop": model.stop(config)
+            case "restart": model.restart(config)
+            case "address": model.open(config)
+            case "ai": copy(model.issuePrompt(for: config), notice: "\(config.name) AI prompt copied")
+            case "terminal", "more": model.openNotchworkPage?(operation, identity)
+            default: return false
+            }
+            return true
+        }
+        if action == "open", value.isEmpty { model.openNotchworkControls?(); return true }
         if action == "project.restart" {
             guard model.configs.contains(where: { $0.group == value }) else { return false }
             model.restartGroup(value); return true

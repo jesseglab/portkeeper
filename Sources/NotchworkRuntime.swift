@@ -6,10 +6,13 @@ import Darwin
 enum NotchworkRuntime {
     static let bundleID = "app.notchwork.host"
     static let apiVersion = 2
+    static let minimumBuild = 8
     static func compatible(_ url: URL) -> Bool {
         guard let bundle = Bundle(url: url), bundle.bundleIdentifier == bundleID,
               let version = bundle.object(forInfoDictionaryKey: "NotchworkAPIVersion") as? Int,
-              version >= apiVersion, let executable = bundle.executableURL else { return false }
+              version >= apiVersion,
+              let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+              (Int(build) ?? 0) >= minimumBuild, let executable = bundle.executableURL else { return false }
         return FileManager.default.isExecutableFile(atPath: executable.path)
     }
     static func verifySignature(_ url: URL) throws {
