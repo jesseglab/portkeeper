@@ -63,6 +63,6 @@ Run `zsh Tests/run.sh` in a graphical Mac login session. The suite covers existi
 
 `zsh Tests/run.sh --preview` opens the notch and drawer with sample services. Quit the preview to stop them. `--build-only` compiles the test app without opening it.
 
-## Notchwork dependency and shared mode
+## Notchwork dependency
 
-See the [current README](../README.md#one-app-two-homes) for SDK builds and shared-host controls. The native surface engine is supplied by NotchworkKit. The standalone host remains optional.
+See the [current README](../README.md#one-app-one-shared-notch) for builds and shared-notch controls. Notchwork is required and supplies the container; Portkeeper installs it if missing and supplies its own interface through the API. See the [runtime integration guide](NOTCHWORK.md) for current hosted-page behavior.
