@@ -77,7 +77,10 @@ extension TerminalWorkspaceTests {
         try! await bridge.present()
         expect(commands.suffix(3).map(\.operation) == ["register", "publish", "present"], "Explicit opening uses the host API, never a local notch")
         generation = 2; failConnection = true
-        try? await Task.sleep(nanoseconds: 5_300_000_000)
+        for _ in 0..<50 {
+            if commands.filter({ $0.operation == "register" }).count >= 3 { break }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
         expect(commands.filter { $0.operation == "register" }.count >= 3, "Bridge re-registers after host reconnect")
         expect(NotchworkBridge.perform("service.stop", value: service.id.uuidString, model: model), "Custom UI callback stops its service")
         bridge.stop()
