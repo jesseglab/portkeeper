@@ -120,6 +120,7 @@ import UniformTypeIdentifiers
     private func chooseManifest() {
         let current = token; busy = true; changed()
         let picker = NSOpenPanel(); picker.allowedContentTypes = [.json]; picker.allowsMultipleSelection = false
+        picker.canChooseDirectories = false; picker.message = "Choose the portkeeper.json created in your project"
         NSApp.activate(ignoringOtherApps: true)
         picker.begin { [weak self] response in
             guard let self, self.token == current else { return }
@@ -133,7 +134,7 @@ import UniformTypeIdentifiers
     private func saveBrief() {
         do {
             let text = try brief(), current = token
-            let picker = NSSavePanel(); picker.nameFieldStringValue = "Portkeeper-setup.md"; picker.allowedContentTypes = [.plainText]
+            let picker = NSSavePanel(); picker.nameFieldStringValue = "Portkeeper-setup.md"; picker.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
             busy = true; changed(); NSApp.activate(ignoringOtherApps: true)
             picker.begin { [weak self] response in
                 guard let self, self.token == current else { return }
