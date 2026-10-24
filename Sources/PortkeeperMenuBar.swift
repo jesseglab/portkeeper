@@ -108,6 +108,8 @@ enum PortkeeperPage: Hashable {
     init(model: PortkeeperModel) {
         self.model = model
         self.terminals = TerminalWorkspaceController(model: model)
+        model.notchworkPages.terminalState = terminals.state
+        model.notchworkPages.detachTerminal = { [weak terminals] in terminals?.openDetached($0) }
         super.init()
         item.button?.target = self
         item.button?.action = #selector(togglePanel)
@@ -121,8 +123,12 @@ enum PortkeeperPage: Hashable {
         }
     }
     @objc private func togglePanel() { openPanel() }
-    func openServiceIssue(_ id: UUID, message: String?) { terminals.showIssue(id, message: message) }
-    func openScanIssue() { terminals.showPorts() }
+    func openServiceIssue(_ id: UUID, message: String?) {
+        model.notchworkPages.dashboard()
+        model.notchworkNotice = message ?? model.configs.first(where: { $0.id == id }).map { "Review \($0.name) status and output." } ?? "Review service status and output."
+        openPanel()
+    }
+    func openScanIssue() { model.notchworkPages.dashboard(ports: true); openPanel() }
     func openWorkspace() { terminals.show() }
     func openPage(_ page: String, identity: String) { terminals.showPage(page, identity: identity) }
     func openPanel() {

@@ -4,7 +4,7 @@ Portkeeper owns its service state, controls, and actions. **Notchwork is a requi
 
 On first launch Portkeeper reuses a compatible installed Notchwork, or installs the verified bundled copy to `~/Applications/Notchwork.app`. It launches the runtime in the background, registers its interface, and publishes live status over the API. There is no optional status-sharing switch, file watcher, or duplicate fallback notch.
 
-Click the Portkeeper menu-bar item to open its UI in Notchwork. Service start/stop/restart controls are supplied by Portkeeper. Project handoff, detailed management, and terminals open the normal Portkeeper workspace window.
+Click the Portkeeper menu-bar item to open its UI in Notchwork. Service start/stop/restart controls are supplied by Portkeeper. Service and project editors, handoff tools, import review, stop confirmations, output, and active terminal controls stay inside the shared notch. The full workspace and detached terminals remain available through their explicit buttons.
 
 Notchwork settings select One (one app uses the whole container), Two (fixed left/right apps), or Multiple (two visible apps selected by high/mid/low priority and newest meaningful update). Portkeeper reports issues as high, startup as mid, and healthy or idle state as low.
 

@@ -21,7 +21,7 @@ import SwiftUI
             if CommandLine.arguments.contains("--preview") { preview() }
             else if CommandLine.arguments.contains("--porty-preview") { previewPorty() }
             else if CommandLine.arguments.contains("--performance") { await runPerformanceProbe(); app.terminate(nil) }
-            else { await runRuntimeTests(); await runNotchworkBridgeTests(); await runPortyTests(); await runTests(); await runNotchTests(); await runOutputDeliveryTests(); app.terminate(nil) }
+            else { await runRuntimeTests(); await runNotchworkPageTests(); await runNotchworkBridgeTests(); await runPortyTests(); await runTests(); await runNotchTests(); await runOutputDeliveryTests(); app.terminate(nil) }
         }
         app.run()
     }

@@ -38,8 +38,8 @@ import NotchworkKit
             if let connection = try? HostConnection.discover() {
                 let client = NotchworkClient(connection: connection)
                 if let response = try? await client.send(HostCommand(operation: "ping")), (response.apiVersion ?? 0) >= 2 {
-                    guard response.capabilities?.contains("interface-state") == true else {
-                        throw ActivityError.invalid("Update and restart Notchwork (0.2.0 build 8 or newer) to show Portkeeper’s dashboard.")
+                    guard response.capabilities?.contains("interface-forms") == true else {
+                        throw ActivityError.invalid("Update and restart Notchwork (0.2.0 build 9 or newer) to show Portkeeper’s dashboard.")
                     }
                     return client
                 }
@@ -103,6 +103,7 @@ import NotchworkKit
                         guard event.sourceID == "app.portkeeper", event.activityID == "services",
                               (0..<30).contains(Date().timeIntervalSince1970 - event.createdAt) else { continue }
                         Self.perform(event.action, value: event.value, model: model)
+                        update()
                     }
                 }
             } catch {
@@ -148,6 +149,7 @@ import NotchworkKit
         _ = try await send(connected, HostCommand(operation: "present", sourceID: "app.portkeeper", id: "services"))
     }
     @discardableResult static func perform(_ action: String, value: String, model: PortkeeperModel) -> Bool {
+        if action == "page", let data = value.data(using: .utf8), let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] { return model.notchworkPages.perform(payload) }
         if action == "refresh" { model.refresh(); return true }
         if ["ui", "service", "project", "listener", "open"].contains(action),
            let data = value.data(using: .utf8),
@@ -164,7 +166,12 @@ import NotchworkKit
             }
             if action == "open" {
                 guard ["add", "handoff", "settings", "workspace", "ports"].contains(operation) else { return false }
-                model.openNotchworkPage?(operation, ""); return true
+                switch operation {
+                case "add": model.notchworkPages.add()
+                case "handoff", "settings": model.notchworkPages.show(operation)
+                case "ports": model.notchworkPages.dashboard(ports: true)
+                default: model.openNotchworkPage?(operation, "")
+                }; return true
             }
             if action == "project" {
                 guard model.configs.contains(where: { $0.group == identity }) else { return false }
@@ -172,7 +179,7 @@ import NotchworkKit
                 case "restart": model.restartGroup(identity)
                 case "start": if !model.isGroupRunning(identity) { model.toggleGroup(identity) }
                 case "stop": if model.isGroupRunning(identity) { model.toggleGroup(identity) }
-                case "more": model.openNotchworkPage?("project", identity)
+                case "more": model.notchworkPages.show("projectActions", id: identity)
                 default: return false
                 }
                 return true
@@ -181,7 +188,7 @@ import NotchworkKit
                 guard let listener = model.listeners.first(where: { $0.id == identity }) else { return false }
                 switch operation {
                 case "ai": copy(model.explanationPrompt(for: listener), notice: "Port \(listener.port) prompt copied")
-                case "stop": model.openNotchworkPage?("listener", identity)
+                case "stop": model.notchworkPages.confirm(listener)
                 default: return false
                 }
                 return true
@@ -193,7 +200,9 @@ import NotchworkKit
             case "restart": model.restart(config)
             case "address": model.open(config)
             case "ai": copy(model.issuePrompt(for: config), notice: "\(config.name) AI prompt copied")
-            case "terminal", "more": model.openNotchworkPage?(operation, identity)
+            case "output": model.notchworkPages.show("output", id: identity)
+            case "terminal": model.notchworkPages.activate(id, open: true)
+            case "more": model.notchworkPages.show("serviceActions", id: identity)
             default: return false
             }
             return true

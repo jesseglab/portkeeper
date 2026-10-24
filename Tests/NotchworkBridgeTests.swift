@@ -23,14 +23,15 @@ extension TerminalWorkspaceTests {
         var opened: (String, String)?
         model.openNotchworkPage = { opened = ($0, $1) }
         let more = "{\"op\":\"more\",\"id\":\"" + service.id.uuidString + "\"}"
-        expect(NotchworkBridge.perform("service", value: more, model: model), "Service menu routes to its existing native editor")
-        expect(opened?.0 == "more" && opened?.1 == service.id.uuidString, "Native routes preserve service identity")
+        expect(NotchworkBridge.perform("service", value: more, model: model), "Service menu opens its hosted action page")
+        expect(opened == nil && model.notchworkPages.page == "serviceActions" && model.notchworkPages.identity == service.id.uuidString, "Hosted routes preserve service identity without opening another window")
+        model.notchworkPages.dashboard()
         expect(!NotchworkBridge.perform("listener", value: #"{"op":"stop","id":"unknown"}"#, model: model), "Stopping listeners requires a current identity and native confirmation")
         model.configs = (0..<25).map { config("Worker \($0)", "Project", "private-command") }
         let many = PortkeeperNotchworkUI.interface(model)
         let state = try! JSONSerialization.jsonObject(with: Data(many.stateJSON!.utf8)) as! [String: Any]
         expect((state["services"] as? [[String: Any]])?.count == 25, "Dashboard includes services beyond the previous twelve-item truncation")
-        expect(!many.stateJSON!.contains("private-command"), "Live state excludes command text")
+        expect(many.stateJSON!.contains("private-command"), "Dashboard preserves the original command subtitle")
         model.configs = [service]
         await checkDashboardDocument(model)
         let fake = NotchworkClient(connection: .init(endpoint: "http://127.0.0.1:1", token: "test"))
@@ -64,7 +65,7 @@ extension TerminalWorkspaceTests {
         expect(card.sourceID == "app.portkeeper" && card.details.first?.contains("Running") == true, "API publication reflects running managed services")
         expect(card.interface != nil, "Portkeeper supplies its own interface")
         let text = String(data: try! JSONEncoder().encode(card), encoding: .utf8)!
-        expect(!text.contains("SECRET_TOKEN") && !text.contains("sleep 10"), "API excludes logs and commands")
+        expect(!text.contains("SECRET_TOKEN"), "Dashboard excludes private logs until output is explicitly opened")
         let before = commands.filter { $0.operation == "publish" }.count
         bridge.update()
         try? await Task.sleep(nanoseconds: 100_000_000)
@@ -104,7 +105,7 @@ extension TerminalWorkspaceTests {
         let window = NSWindow(contentRect: web.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = web; window.orderFrontRegardless()
         defer { configuration.userContentController.removeScriptMessageHandler(forName: "dashboard"); window.orderOut(nil); window.contentView = nil }
-        web.loadHTMLString("<script>window.notchwork={invoke:(action,value)=>window.webkit.messageHandlers.dashboard.postMessage({action,value})}</script>" + interface.html, baseURL: nil)
+        web.loadHTMLString("<style>html,body{margin:0;background:#000;color:white;color-scheme:dark}*{box-sizing:border-box}</style><script>window.notchwork={invoke:(action,value)=>window.webkit.messageHandlers.dashboard.postMessage({action,value})}</script>" + interface.html, baseURL: nil)
         do {
             for _ in 0..<50 {
                 if (try? await web.evaluateJavaScript("typeof render")) as? String == "function" { break }
@@ -124,6 +125,66 @@ extension TerminalWorkspaceTests {
             _ = try await web.evaluateJavaScript("window.dispatchEvent(new CustomEvent('notchwork:state',{detail:" + PortkeeperNotchworkUI.interface(model).stateJSON! + "}))")
             let query = try await web.evaluateJavaScript("document.getElementById('query').value") as? String
             expect(query == "Backend", "Live state refresh preserves the selected port filter")
+            func push() async throws {
+                let content = PortkeeperNotchworkUI.interface(model)
+                web.setFrameSize(NSSize(width: content.width!, height: content.height))
+                window.setContentSize(web.frame.size)
+                _ = try await web.evaluateJavaScript("window.dispatchEvent(new CustomEvent('notchwork:state',{detail:" + content.stateJSON! + "}))")
+            }
+            func click(_ selector: String) async throws {
+                _ = try await web.evaluateJavaScript("document.querySelector(" + String(data: try JSONEncoder().encode(selector), encoding: .utf8)! + ").click()")
+                try await Task.sleep(nanoseconds: 200_000_000)
+                try await push()
+            }
+            func screenshot(_ name: String) async throws {
+                guard let folder = ProcessInfo.processInfo.environment["PARITY_SCREENSHOT_DIRECTORY"] else { return }
+                try await Task.sleep(nanoseconds: 150_000_000)
+                let image = try await web.takeSnapshot(configuration: nil)
+                if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                    try png.write(to: URL(fileURLWithPath: folder).appendingPathComponent(name + ".png"))
+                }
+            }
+            try await click("[data-tab=services]")
+            try await screenshot("parity-dashboard")
+            try await click("[data-action=service][data-op=more]")
+            expect(model.notchworkPages.page == "serviceActions", "Real service menu stays inside the notch document")
+            try await click("[data-page=edit]")
+            expect(model.notchworkPages.page == "serviceEditor", "Real Edit button opens all editor fields")
+            _ = try await web.evaluateJavaScript("document.querySelector('[name=name]').focus();document.querySelector('[name=name]').value='Draft Worker';document.querySelector('[name=name]').dispatchEvent(new Event('input',{bubbles:true}))")
+            try await Task.sleep(nanoseconds: 350_000_000)
+            try await push()
+            let webResult0 = try await web.evaluateJavaScript("document.querySelector('[name=name]').value") as? String
+            expect(webResult0 == "Draft Worker", "Live refresh preserves editor draft")
+            let webResult1 = try await web.evaluateJavaScript("document.activeElement.name") as? String
+            expect(webResult1 == "name", "Live refresh preserves editor focus")
+            try await screenshot("parity-editor")
+            try await click("[data-page=back]")
+            expect(model.configs[0].name == "Worker", "Real Cancel does not save the draft")
+            try await click("[data-action=open][data-op=handoff]")
+            try await screenshot("parity-handoff")
+            try await click("[data-page=paste]")
+            let json = "{\"version\":1,\"project\":\"Fixture\",\"services\":[{\"name\":\"Preview\",\"directory\":\"/private/tmp\",\"command\":\"echo preview\"}]}"
+            let quoted = String(data: try JSONEncoder().encode(json), encoding: .utf8)!
+            _ = try await web.evaluateJavaScript("document.querySelector('[name=json]').value=" + quoted + ";document.querySelector('[name=json]').dispatchEvent(new Event('input',{bubbles:true}))")
+            try await screenshot("parity-paste")
+            try await click("[data-page=review]")
+            expect(model.notchworkPages.page == "importReview", "Real review button reaches the existing handoff parser")
+            expect(model.configs.count == 1, "Review cannot import or run a service")
+            try await screenshot("parity-import-review")
+            try await click("[data-page=back]")
+            model.logs[model.configs[0].id] = "[ready] Worker is ready\n[info] Waiting for requests\n[warning] Example warning"
+            try await click("[data-action=service][data-op=more]")
+            try await click("[data-page=output]")
+            try await screenshot("parity-output")
+            let webResult2 = try await web.evaluateJavaScript("document.querySelector('[data-log-query=output]')!==null") as? Bool
+            expect(webResult2 == true, "Hosted output retains search, filters, wrapping, copy, and follow controls")
+            try await click("[data-page=back]")
+            model.notchworkPages.terminalState = TerminalWorkspaceState(defaults: UserDefaults(suiteName: "web-parity-\(UUID().uuidString)")!)
+            try await click("[data-action=service][data-op=terminal]")
+            expect(model.notchworkPages.page == "terminals", "Real terminal button opens hosted terminal controls")
+            try await screenshot("parity-terminals")
+            model.notchworkPages.dashboard(); try await push()
+
         } catch { expect(false, "Real dashboard WebKit check: \(error)") }
         model.notchworkTab = "services"; model.notchworkSearch = ""
     }

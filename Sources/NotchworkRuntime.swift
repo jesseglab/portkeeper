@@ -6,7 +6,7 @@ import Darwin
 enum NotchworkRuntime {
     static let bundleID = "app.notchwork.host"
     static let apiVersion = 2
-    static let minimumBuild = 8
+    static let minimumBuild = 9
     static func compatible(_ url: URL) -> Bool {
         guard let bundle = Bundle(url: url), bundle.bundleIdentifier == bundleID,
               let version = bundle.object(forInfoDictionaryKey: "NotchworkAPIVersion") as? Int,

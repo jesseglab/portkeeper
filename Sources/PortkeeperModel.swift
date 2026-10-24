@@ -40,6 +40,7 @@ struct ServiceIssue: Equatable {
     @Published var notchworkTab = "services"
     @Published var notchworkSearch = ""
     @Published var notchworkNotice = ""
+    lazy var notchworkPages = PortkeeperNotchworkPages(model: self)
     private var notchworkBridge: NotchworkBridge?
     @Published var configs: [ServiceConfig] = []
     @Published var listeners: [Listener] = []
