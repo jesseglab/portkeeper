@@ -31,6 +31,7 @@ ditto --norsrc "$RUNTIME_APP" "$BUILD_DIR/Notchwork-runtime.app"
 RUNTIME_APP="$BUILD_DIR/Notchwork-runtime.app"
 xattr -cr "$RUNTIME_APP"
 [[ "$(/usr/bin/plutil -extract NotchworkAPIVersion raw "$RUNTIME_APP/Contents/Info.plist")" -ge 2 ]] || { print -u2 "Notchwork API 2 is required"; exit 1; }
+[[ "$(/usr/bin/plutil -extract CFBundleVersion raw "$RUNTIME_APP/Contents/Info.plist")" -ge 10 ]] || { print -u2 "Notchwork build 10 or newer is required for side-specific hover"; exit 1; }
 /usr/bin/codesign --verify --deep --strict "$RUNTIME_APP"
 source scripts/notchwork-dependency.sh
 prepare_notchwork "$BUILD_DIR"

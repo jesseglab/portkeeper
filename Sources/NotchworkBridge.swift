@@ -38,8 +38,8 @@ import NotchworkKit
             if let connection = try? HostConnection.discover() {
                 let client = NotchworkClient(connection: connection)
                 if let response = try? await client.send(HostCommand(operation: "ping")), (response.apiVersion ?? 0) >= 2 {
-                    guard response.capabilities?.contains("interface-forms") == true else {
-                        throw ActivityError.invalid("Update and restart Notchwork (0.2.0 build 9 or newer) to show Portkeeper’s dashboard.")
+                    guard ["interface-forms", "side-hover", "user-controlled-pinning"].allSatisfy({ response.capabilities?.contains($0) == true }) else {
+                        throw ActivityError.invalid("Update and restart Notchwork (0.2.1 build 10 or newer) to show Portkeeper’s dashboard.")
                     }
                     return client
                 }

@@ -6,9 +6,9 @@ Portkeeper keeps your local projects, services, and terminals close. Start a pro
 
 **macOS 14+ · Apple silicon · Powered by [Notchwork](https://github.com/jesseglab/notchwork)**
 
-[Download v1.3.3](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.3) · [Get started](#get-started) · [Use with Notchwork](#one-app-one-shared-notch) · [Full guide](docs/GUIDE.md)
+[Download v1.3.4](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.4) · [Get started](#get-started) · [Use with Notchwork](#one-app-one-shared-notch) · [Full guide](docs/GUIDE.md)
 
-> **Downloadable development preview:** Portkeeper **1.3.3, build 11**, includes the matching Notchwork runtime. [Download the DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.dmg) or [ZIP](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.zip). No source build or separate prerequisite download is needed. These binaries are ad-hoc signed and have not been notarized; macOS may block them on first launch.
+> **Downloadable development preview:** Portkeeper **1.3.4, build 12**, includes the matching Notchwork runtime. [Download the DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.4/Portkeeper-1.3.4-arm64-development.dmg) or [ZIP](https://github.com/jesseglab/portkeeper/releases/download/v1.3.4/Portkeeper-1.3.4-arm64-development.zip). No source build or separate prerequisite download is needed. These binaries are ad-hoc signed and have not been notarized; macOS may block them on first launch.
 
 ## Less hunting. More building.
 
@@ -26,7 +26,7 @@ Service controls operate on Portkeeper-managed processes. Removing a console fro
 
 Portkeeper supplies the black-and-green interface, Porty, service and project controls, editors, handoff tools, output, and active terminals. **[Notchwork](https://github.com/jesseglab/notchwork) supplies the container:** the notch window, placement, hover behavior, and morphing motion.
 
-On first launch, Portkeeper reuses a compatible installed Notchwork or installs its verified bundled copy into your Applications folder. It starts the runtime in the background and connects automatically. Notchwork is a prerequisite; Portkeeper has no separate notch implementation.
+On first launch, Portkeeper reuses a compatible installed Notchwork or installs its verified bundled copy into your Applications folder. This prerequisite check runs automatically on first launch after dragging Portkeeper to Applications; it needs no separate download. It starts the runtime in the background and connects automatically. Notchwork is a prerequisite; Portkeeper has no separate notch implementation.
 
 Click the Portkeeper menu-bar item to open its interface. Service and project editors, handoff copy/save/import, import review, stop confirmations, output, and active terminal controls stay inside the shared notch. The full workspace and detached terminals remain available through their explicit buttons.
 
@@ -50,7 +50,7 @@ Portkeeper batches service output, bounds pending data, and prevents overlapping
 
 ### Install with drag and drop
 
-[Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.3/Portkeeper-1.3.3-arm64-development.dmg). The [release page](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.3) also includes a ZIP and SHA-256 checksums.
+[Download the Apple silicon DMG](https://github.com/jesseglab/portkeeper/releases/download/v1.3.4/Portkeeper-1.3.4-arm64-development.dmg). The [release page](https://github.com/jesseglab/portkeeper/releases/tag/v1.3.4) also includes a ZIP and SHA-256 checksums.
 
 1. Download the DMG and open it.
 2. Drag **Portkeeper** onto **Applications** in the installer window.
@@ -76,7 +76,7 @@ open dist/Portkeeper.app
 
 The build produces `dist/Portkeeper.app` and `dist/Portkeeper.zip`, including the matching Notchwork runtime and its license notices. It uses the sibling Notchwork checkout; set `NOTCHWORK_PACKAGE_PATH` to use another local checkout. `NOTCHWORK_RUNTIME_APP_PATH` can point to an already-built matching runtime, which is signature-checked before bundling.
 
-Portkeeper requires **Notchwork 0.2.0 build 9 or newer**, with the `interface-forms` capability. First-run installation needs no administrator permission or network download. An incompatible existing destination is preserved and reported in settings; an older running runtime must quit before a newer version can take over. [Installation and compatibility details.](docs/NOTCHWORK.md)
+Portkeeper requires **Notchwork 0.2.1 build 10 or newer**, with the `interface-forms`, `side-hover`, and `user-controlled-pinning` capabilities. First-run installation needs no administrator permission or network download. An incompatible existing destination is preserved and reported in settings; an older running runtime must quit before a newer version can take over. [Installation and compatibility details.](docs/NOTCHWORK.md)
 
 Builds are ad-hoc signed and not notarized; macOS may block downloaded binaries. No services start automatically. Configurations and logs live in `~/Library/Application Support/Portkeeper/`. Updating a running Portkeeper requires quitting it first, which stops its managed services.
 

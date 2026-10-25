@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: jesseglab/notchwork
-          ref: 808b3d3909ee3d4ea70d458596eb4748f9d31432
+          ref: bec6f569dbb246d7ae8c50551d8b46ca774c486c
           path: notchwork
       - name: Check release privacy
         run: python3 scripts/check-release-privacy.py
